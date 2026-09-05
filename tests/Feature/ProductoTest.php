@@ -101,6 +101,52 @@ class ProductoTest extends TenantTestCase
         $response->assertDontSee('Sprite 1.5L');
     }
 
+    /**
+     * Regresión del bug de orden de middleware: sin la prioridad explícita
+     * en bootstrap/app.php, SubstituteBindings corre ANTES que
+     * InitializeTenancyByAuthenticatedUser, así que el binding implícito de
+     * {producto} se resuelve contra la base CENTRAL (donde "productos" no
+     * existe) en vez de la base del tenant.
+     *
+     * A propósito NO reusamos la inicialización de tenancy que hace
+     * TenantTestCase::setUp(): esa inicialización "de más" es justamente lo
+     * que hacía que los tests anteriores no detectaran el bug (la conexión
+     * ya estaba en la base del tenant antes de que el pipeline HTTP
+     * arrancara, sin importar el orden real de los middlewares). Acá
+     * terminamos la tenancy a mano para simular una request real "en frío"
+     * y dejamos que sea el middleware, corriendo dentro del pipeline HTTP
+     * real disparado por actingAs()->put(), el que la inicialice.
+     */
+    public function test_update_producto_resuelve_binding_de_tenant_sin_tenancy_pre_inicializada(): void
+    {
+        $producto = Producto::create([
+            'nombre' => 'Yerba 1kg',
+            'codigo_barras' => null,
+            'precio_costo' => 1000,
+            'precio_venta' => 1500,
+            'stock_minimo' => 3,
+        ]);
+
+        tenancy()->end();
+
+        $response = $this->actingAs($this->user)->put(route('productos.update', $producto), [
+            'nombre' => 'Yerba 1kg (actualizada)',
+            'codigo_barras' => null,
+            'precio_costo' => 1100,
+            'precio_venta' => 1600,
+            'stock_minimo' => 3,
+        ]);
+
+        $response->assertRedirect(route('productos.index'));
+
+        tenancy()->initialize($this->comercio);
+
+        $this->assertDatabaseHas('productos', [
+            'id' => $producto->id,
+            'nombre' => 'Yerba 1kg (actualizada)',
+        ]);
+    }
+
     public function test_busqueda_por_codigo_de_barras(): void
     {
         Producto::create([
