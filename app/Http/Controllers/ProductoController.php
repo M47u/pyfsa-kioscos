@@ -36,16 +36,20 @@ class ProductoController extends Controller
 
         $productos = Producto::query()
             ->when($buscar !== '', fn ($query) => $query->search($buscar))
+            ->when($bajoMinimo, fn ($query) => $query->withSum('movimientos', 'cantidad'))
             ->orderBy('nombre')
             ->when(request()->wantsJson(), fn ($query) => $query->limit(20))
             ->get();
 
         if ($bajoMinimo) {
-            // Filtro en memoria sobre la colección ya traída: el resultado
-            // esperado es chico (solo los productos bajo mínimo), así que
-            // llamar bajoMinimo() por fila acá no reintroduce el N+1 que sí
-            // importaría en el listado completo sin filtrar.
-            $productos = $productos->filter(fn (Producto $producto) => $producto->bajoMinimo())->values();
+            // Filtro en memoria sobre la colección ya traída, pero usando el
+            // stock ya agregado por SQL vía withSum() de arriba: llamar
+            // Producto::bajoMinimo()/stockActual() acá dispararía una query
+            // por producto del catálogo completo (se evalúa antes de
+            // filtrar), reintroduciendo el N+1 que el resto del módulo evita.
+            $productos = $productos
+                ->filter(fn (Producto $producto) => ($producto->movimientos_sum_cantidad ?? 0) < $producto->stock_minimo)
+                ->values();
         }
 
         if (request()->wantsJson()) {
