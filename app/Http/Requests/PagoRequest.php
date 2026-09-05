@@ -25,7 +25,11 @@ class PagoRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'monto' => ['required', 'numeric', 'min:0.01'],
+            // max:99999999.99 es el tope real de la columna pagos.monto
+            // (decimal(10,2)): sin este límite, un monto de 9 dígitos pasa
+            // la validación y explota como un error crudo de MySQL al
+            // insertar.
+            'monto' => ['required', 'numeric', 'min:0.01', 'max:99999999.99'],
         ];
     }
 }

@@ -85,6 +85,23 @@ class PagoTest extends TenantTestCase
         $this->assertDatabaseCount('pagos', 0);
     }
 
+    /**
+     * pagos.monto es decimal(10,2), tope 99999999.99. Sin un max acá, un
+     * monto de 9 dígitos pasaba la validación y explotaba como un error
+     * crudo de MySQL al insertar en vez de un mensaje de validación claro.
+     */
+    public function test_pago_que_desborda_la_columna_monto_falla_validacion(): void
+    {
+        $cliente = Cliente::create(['nombre' => 'Juan Pérez', 'telefono' => null, 'limite_credito' => 5000]);
+
+        $response = $this->actingAs($this->user)->post(route('clientes.pagos.store', $cliente), [
+            'monto' => 100000000,
+        ]);
+
+        $response->assertSessionHasErrors('monto');
+        $this->assertDatabaseCount('pagos', 0);
+    }
+
     public function test_supera_limite_segun_saldo_y_limite_credito(): void
     {
         $cliente = Cliente::create(['nombre' => 'Juan Pérez', 'telefono' => null, 'limite_credito' => 1000]);
