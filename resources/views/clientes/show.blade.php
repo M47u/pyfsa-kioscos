@@ -47,13 +47,17 @@
     </div>
 
     {{-- Registrar un pago nuevo, mismo patrón visual que "Reponer" en
-         productos/index.blade.php. --}}
+         productos/index.blade.php. El botón ya no manda el form directo:
+         abre el modal de confirmación de abajo, que muestra el monto
+         tipeado antes de mandarlo — un pago mal tipeado (un 0 de más) no
+         se puede deshacer con un "Volver atrás" del navegador. --}}
     <div class="mb-6 rounded-sm border border-[#19140035] dark:border-[#3E3E3A] p-4">
         <h2 class="text-sm font-medium mb-3">Registrar pago</h2>
-        <form method="POST" action="{{ route('clientes.pagos.store', $cliente) }}" class="flex gap-2">
+        <form id="pago-form" method="POST" action="{{ route('clientes.pagos.store', $cliente) }}" class="flex gap-2">
             @csrf
             <input
                 type="number"
+                id="monto"
                 name="monto"
                 step="0.01"
                 min="0.01"
@@ -62,13 +66,24 @@
                 class="flex-1 rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
             >
             <button
-                type="submit"
+                type="button"
+                id="abrir-confirmar-pago"
                 class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] px-4 py-2 text-sm font-medium"
             >
                 Registrar pago
             </button>
         </form>
     </div>
+
+    <x-confirm-dialog
+        id="confirmar-pago-dialog"
+        titulo="Confirmar pago"
+        confirmar-label="Sí, registrar pago"
+        cancelar-label="Cancelar"
+    >
+        Vas a registrar un pago de <strong>$<span id="monto-a-confirmar">0.00</span></strong>
+        para <strong>{{ $cliente->nombre }}</strong>. Esta acción no se puede deshacer.
+    </x-confirm-dialog>
 
     {{-- Historial cronológico: ventas fiadas y pagos mezclados (ver
          ClienteController::show), más reciente primero. --}}
@@ -106,4 +121,36 @@
             </tbody>
         </table>
     </div>
+
+    <script>
+        (function () {
+            const pagoForm = document.getElementById('pago-form');
+            const montoInput = document.getElementById('monto');
+            const abrirConfirmarBtn = document.getElementById('abrir-confirmar-pago');
+            const dialog = document.getElementById('confirmar-pago-dialog');
+            const montoConfirmarSpan = document.getElementById('monto-a-confirmar');
+            const confirmarBtn = document.getElementById('confirmar-pago-dialog-confirmar');
+            const cancelarBtn = document.getElementById('confirmar-pago-dialog-cancelar');
+
+            abrirConfirmarBtn.addEventListener('click', () => {
+                // El botón ya no es type="submit", así que la validación
+                // nativa del input (required, min, step) no dispara sola
+                // al hacer click — la pedimos a mano antes de abrir el modal,
+                // para no confirmar un monto vacío o inválido.
+                if (!pagoForm.reportValidity()) {
+                    return;
+                }
+
+                montoConfirmarSpan.textContent = parseFloat(montoInput.value).toFixed(2);
+                dialog.showModal();
+            });
+
+            confirmarBtn.addEventListener('click', () => {
+                dialog.close();
+                pagoForm.submit();
+            });
+
+            cancelarBtn.addEventListener('click', () => dialog.close());
+        })();
+    </script>
 @endsection
