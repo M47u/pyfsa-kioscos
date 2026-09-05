@@ -147,6 +147,31 @@ class ProductoTest extends TenantTestCase
         ]);
     }
 
+    /**
+     * Regresión: `stock_minimo` es NOT NULL en la DB (default 0), pero la
+     * regla de validación es 'nullable'. Si el campo llega vacío,
+     * ConvertEmptyStringsToNull lo vuelve null, y sin prepareForValidation()
+     * normalizándolo a 0 el insert explota con un error de DB en vez de
+     * guardar el default de negocio.
+     */
+    public function test_alta_de_producto_con_stock_minimo_vacio_usa_default_cero(): void
+    {
+        $response = $this->actingAs($this->user)->post(route('productos.store'), [
+            'nombre' => 'Fideos 500g',
+            'codigo_barras' => null,
+            'precio_costo' => 500,
+            'precio_venta' => 800,
+            'stock_minimo' => '',
+        ]);
+
+        $response->assertRedirect(route('productos.index'));
+
+        $this->assertDatabaseHas('productos', [
+            'nombre' => 'Fideos 500g',
+            'stock_minimo' => 0,
+        ]);
+    }
+
     public function test_busqueda_por_codigo_de_barras(): void
     {
         Producto::create([

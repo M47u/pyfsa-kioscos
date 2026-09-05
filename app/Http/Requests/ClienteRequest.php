@@ -18,6 +18,21 @@ class ClienteRequest extends FormRequest
     }
 
     /**
+     * La columna `limite_credito` es NOT NULL con default 0 (ver migración
+     * de clientes). Si el form llega con el campo vacío,
+     * ConvertEmptyStringsToNull lo vuelve null, que la regla 'nullable'
+     * deja pasar, y el insert/update explota contra la DB en vez de dar
+     * un error de validación prolijo. Normalizamos acá para que el
+     * default de negocio quede explícito antes de validar.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->input('limite_credito') === null) {
+            $this->merge(['limite_credito' => 0]);
+        }
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function rules(): array

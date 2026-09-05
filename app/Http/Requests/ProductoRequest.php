@@ -20,6 +20,21 @@ class ProductoRequest extends FormRequest
     }
 
     /**
+     * La columna `stock_minimo` es NOT NULL con default 0 (ver migración
+     * de productos). Si el form llega con el campo vacío,
+     * ConvertEmptyStringsToNull lo vuelve null, que la regla 'nullable'
+     * deja pasar, y el insert/update explota contra la DB en vez de dar
+     * un error de validación prolijo. Normalizamos acá para que el
+     * default de negocio quede explícito antes de validar.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->input('stock_minimo') === null) {
+            $this->merge(['stock_minimo' => 0]);
+        }
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function rules(): array
