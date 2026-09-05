@@ -32,6 +32,8 @@ Gotcha: the `mysql` CLI at `c:/xampp/mysql/bin/mysql.exe` is MariaDB's client an
 
 (Harmless leftover: `skip-name-resolve` was added to `c:/xampp/mysql/bin/my.ini` while debugging the unused MariaDB instance — no functional impact, just noted in case it's revisited.)
 
+**Gotcha — el CSS se queda viejo sin avisar**: `public/build/` (gitignored, nunca se commitea) se genera con `npm run build`, y Tailwind v4 solo mete en el bundle las clases que encuentra escaneando los archivos Blade que existen AL MOMENTO de compilar. `php artisan test` nunca toca esto — un agente puede agregar vistas nuevas, correr toda la suite en verde, y el CSS de esas vistas simplemente no existe hasta que alguien corre `npm run build` a mano. Ya pasó una vez (5/9/2026: las vistas de Fiado y del panel/nav se crearon horas después del último build, y se veían sin ningún estilo — HTML crudo). Corré `npm run build` después de cualquier tanda de trabajo que toque `resources/views/**` o `resources/css/**`, antes de dar por buena una revisión visual.
+
 ## Verified working
 
 - Creating a `Comercio` auto-creates a real MySQL database (`tenantUUID`); deleting it auto-drops that database. Tested live, and now also exercised by the test suite (see Testing below).
