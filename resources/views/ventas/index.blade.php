@@ -24,6 +24,15 @@
             </div>
         @endif
 
+        {{-- Advertencia no bloqueante: cliente fiado que superó su límite de
+             crédito (ver VentaController::store). La venta ya se registró;
+             esto es solo un aviso para el kiosquero. --}}
+        @if (session('advertencia'))
+            <div class="mb-4 rounded-sm bg-[#fffbea] dark:bg-[#2a2200] border border-[#F5A623] text-[#8a6100] dark:text-[#F5C453] px-4 py-3 text-sm">
+                {{ session('advertencia') }}
+            </div>
+        @endif
+
         @if ($errors->any())
             <div class="mb-4 rounded-sm bg-[#fff2f2] dark:bg-[#1D0002] border border-[#F53003] text-[#F53003] dark:text-[#FF4433] px-4 py-3 text-sm">
                 <ul class="list-disc list-inside">

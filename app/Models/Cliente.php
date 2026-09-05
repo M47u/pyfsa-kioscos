@@ -27,17 +27,37 @@ class Cliente extends Model
         return $this->hasMany(Venta::class);
     }
 
+    public function pagos(): HasMany
+    {
+        return $this->hasMany(Pago::class);
+    }
+
     /**
      * El saldo de fiado NO se guarda en columna propia: se calcula, igual
-     * que Producto::stockActual(). Hoy se calcula solo como la suma de las
-     * ventas fiadas del cliente, porque todavía no existe el módulo de
-     * Pagos. Cuando exista, los pagos van a tener que RESTARSE acá
-     * (saldo = ventas fiadas - pagos) — ver documento de alcance.
+     * que Producto::stockActual(). Es la suma de las ventas fiadas del
+     * cliente MENOS la suma de sus pagos. Un resultado negativo (pagó más
+     * de lo que debía) es información válida y no se clampea a 0: no hay
+     * ninguna regla de negocio que lo impida.
      */
     public function saldo(): float
     {
-        return (float) $this->ventas()
+        $totalFiado = (float) $this->ventas()
             ->where('medio_pago', Venta::MEDIO_PAGO_FIADO)
             ->sum('total');
+
+        $totalPagado = (float) $this->pagos()->sum('monto');
+
+        return $totalFiado - $totalPagado;
+    }
+
+    /**
+     * Mismo patrón que Producto::bajoMinimo(): solo alerta, no bloquea (ver
+     * VentaController::store y la decisión confirmada en CLAUDE.md/documento
+     * de alcance — a diferencia del stock, el límite de crédito es una
+     * cuestión de confianza que el kiosquero puede decidir pasar por alto).
+     */
+    public function superaLimite(): bool
+    {
+        return $this->saldo() > (float) $this->limite_credito;
     }
 }

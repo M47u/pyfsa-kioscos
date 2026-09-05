@@ -79,6 +79,22 @@ class VentaController extends Controller
             }
         });
 
+        // A diferencia del stock (que bloquea), el límite de crédito de un
+        // cliente fiado solo advierte: el kiosquero puede decidir fiarle de
+        // más a un cliente de confianza (decisión de negocio confirmada).
+        // Se chequea DESPUÉS de la transacción para reflejar el saldo ya
+        // actualizado con la venta recién creada.
+        if ($data['medio_pago'] === Venta::MEDIO_PAGO_FIADO) {
+            $cliente = Cliente::find($data['cliente_id']);
+
+            if ($cliente !== null && $cliente->superaLimite()) {
+                session()->flash(
+                    'advertencia',
+                    "{$cliente->nombre} superó su límite de crédito (saldo: {$cliente->saldo()}, límite: {$cliente->limite_credito})."
+                );
+            }
+        }
+
         return redirect()->route('ventas.index')->with('status', 'Venta registrada correctamente.');
     }
 }
