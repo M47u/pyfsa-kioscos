@@ -63,6 +63,15 @@ class VentaRequest extends FormRequest
      * Vive acá y no en el controller porque la convención del proyecto es
      * que TODA validación de negocio de una venta vive en el FormRequest
      * (ver cliente_id/medio_pago arriba).
+     *
+     * IMPORTANTE — esto es un PRE-CHECK de UX, no la garantía real: es un
+     * SELECT simple, sin lock, que corre ANTES de la transacción del
+     * controller. Sirve para fallar rápido con un mensaje claro en el caso
+     * común, pero bajo concurrencia (dos cajas vendiendo el mismo producto,
+     * o un doble submit) dos requests pueden pasar este chequeo los dos
+     * antes de que ninguno confirme. La garantía real contra condiciones de
+     * carrera vive en VentaController::store, que vuelve a calcular el
+     * stock con lockForUpdate() DENTRO de la transacción.
      */
     public function withValidator(Validator $validator): void
     {

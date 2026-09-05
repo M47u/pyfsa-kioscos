@@ -11,6 +11,7 @@ use App\Models\Producto;
 use App\Models\Venta;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class VentaController extends Controller
@@ -37,19 +38,59 @@ class VentaController extends Controller
      * MovimientoStock negativo de cada ítem, todo en una transacción: si
      * algo falla a mitad de camino no queda una venta a medio crear ni
      * movimientos de stock sueltos. La venta SE BLOQUEA si dejaría el stock
-     * de algún producto negativo — esa validación vive en
-     * VentaRequest::withValidator, no acá, porque es la convención del
-     * proyecto para validación de negocio de ventas.
+     * de algún producto negativo.
+     *
+     * El pre-check de VentaRequest::withValidator (SELECT simple, sin lock)
+     * da buen UX -falla rápido, con mensaje claro- pero NO es la garantía
+     * real: dos ventas concurrentes del mismo producto (dos cajas, o un
+     * doble submit) pueden pasar esa validación las dos antes de que
+     * ninguna confirme. La garantía real vive ACÁ: lockForUpdate() sobre
+     * los productos involucrados serializa el acceso entre transacciones
+     * concurrentes, y el stock se recalcula después de tomar el lock, ya
+     * con los datos confirmados por cualquier venta que haya llegado
+     * primero.
      */
     public function store(VentaRequest $request): RedirectResponse
     {
         $data = $request->validated();
 
         DB::transaction(function () use ($data) {
+            $productoIds = collect($data['items'])->pluck('producto_id')->unique();
+
+            // lockForUpdate() bloquea las filas de estos productos a nivel
+            // de base de datos: si otra venta concurrente del mismo
+            // producto ya está adentro de su propia transacción, esta
+            // query espera a que esa termine (commit o rollback) antes de
+            // poder leer, en vez de leer un stock desactualizado.
             $productos = Producto::query()
-                ->whereIn('id', collect($data['items'])->pluck('producto_id'))
+                ->whereIn('id', $productoIds)
+                ->lockForUpdate()
                 ->get()
                 ->keyBy('id');
+
+            // Mismo criterio que VentaRequest::withValidator: sumar por
+            // producto (puede repetirse en más de una fila del carrito) y
+            // comparar el total pedido contra el stock ya recalculado bajo
+            // el lock.
+            $cantidadesPorProducto = collect($data['items'])
+                ->groupBy('producto_id')
+                ->map(fn ($filas) => (int) $filas->sum('cantidad'));
+
+            foreach ($cantidadesPorProducto as $productoId => $cantidadPedida) {
+                $producto = $productos[$productoId];
+                $stockActual = $producto->stockActual();
+
+                if ($cantidadPedida > $stockActual) {
+                    // ValidationException, no una excepción custom: así
+                    // Laravel la maneja igual que cualquier otro fallo de
+                    // validación de la app (redirect back con el error en
+                    // la misma clave 'items' que ya usa el pre-check),
+                    // sin necesidad de un catch manual acá.
+                    throw ValidationException::withMessages([
+                        'items' => "No hay stock suficiente de {$producto->nombre}: quedan {$stockActual}, se pidieron {$cantidadPedida}.",
+                    ]);
+                }
+            }
 
             $total = collect($data['items'])->sum(
                 fn (array $item) => $productos[$item['producto_id']]->precio_venta * $item['cantidad']

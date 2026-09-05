@@ -8,6 +8,8 @@ use App\Models\Cliente;
 use App\Models\MovimientoStock;
 use App\Models\Producto;
 use App\Models\Venta;
+use Illuminate\Support\Facades\DB;
+use PDO;
 
 class VentaTest extends TenantTestCase
 {
@@ -183,5 +185,52 @@ class VentaTest extends TenantTestCase
         $this->assertSame(0, Venta::count());
         $this->assertDatabaseCount('items_venta', 0);
         $this->assertSame(20, $producto->fresh()->stockActual());
+    }
+
+    /**
+     * Prueba de concurrencia real (confirmado con el usuario que vale la
+     * pena si sale limpio, ver code review): abre una SEGUNDA conexión
+     * MySQL real (su propia sesión, no la de Eloquent) a la misma base del
+     * tenant, y desde ahí toma un lockForUpdate() sobre el producto SIN
+     * confirmar — simulando una segunda caja ya "adentro" de su
+     * transacción. Si VentaController::store no tomara su propio
+     * lockForUpdate(), la venta pasaría sin esperar nada. Como sí lo toma,
+     * la query queda bloqueada por la fila hasta que expira el
+     * innodb_lock_wait_timeout (bajado a 1s para el test) y MySQL corta la
+     * espera con un error — la prueba de que el lock real está pasando.
+     */
+    public function test_lockForUpdate_hace_esperar_a_una_venta_mientras_otra_conexion_sostiene_el_lock(): void
+    {
+        $producto = $this->crearProducto(); // stock inicial: 20
+
+        $config = config('database.connections.tenant');
+
+        $segundaConexion = new PDO(
+            "mysql:host={$config['host']};port={$config['port']};dbname={$config['database']};charset=utf8mb4",
+            $config['username'],
+            $config['password']
+        );
+        $segundaConexion->exec('SET SESSION innodb_lock_wait_timeout = 1');
+        $segundaConexion->beginTransaction();
+        $segundaConexion->query("SELECT id FROM productos WHERE id = {$producto->id} FOR UPDATE");
+
+        // La conexión de la app también necesita un timeout corto: si no,
+        // el test esperaría los 50s por defecto de MySQL antes de fallar.
+        DB::statement('SET SESSION innodb_lock_wait_timeout = 1');
+
+        $this->withoutExceptionHandling();
+
+        try {
+            $this->expectExceptionMessageMatches('/Lock wait timeout/i');
+
+            $this->actingAs($this->user)->post(route('ventas.store'), [
+                'medio_pago' => 'efectivo',
+                'items' => [
+                    ['producto_id' => $producto->id, 'cantidad' => 1],
+                ],
+            ]);
+        } finally {
+            $segundaConexion->rollBack();
+        }
     }
 }
