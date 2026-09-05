@@ -36,9 +36,10 @@ class VentaController extends Controller
      * Crea la venta, sus ítems (con snapshot de precio_venta) y el
      * MovimientoStock negativo de cada ítem, todo en una transacción: si
      * algo falla a mitad de camino no queda una venta a medio crear ni
-     * movimientos de stock sueltos. No se bloquea la venta si el stock
-     * queda negativo — es una decisión de negocio del dueño del kiosco,
-     * no del sistema (ver documento de alcance).
+     * movimientos de stock sueltos. La venta SE BLOQUEA si dejaría el stock
+     * de algún producto negativo — esa validación vive en
+     * VentaRequest::withValidator, no acá, porque es la convención del
+     * proyecto para validación de negocio de ventas.
      */
     public function store(VentaRequest $request): RedirectResponse
     {

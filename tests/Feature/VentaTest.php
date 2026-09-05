@@ -118,4 +118,70 @@ class VentaTest extends TenantTestCase
         $response->assertSessionHasErrors('medio_pago');
         $this->assertSame(0, Venta::count());
     }
+
+    /**
+     * Corrección confirmada por el usuario: la venta SE BLOQUEA si dejaría
+     * el stock de algún producto negativo — no se crea nada (ni Venta, ni
+     * ItemVenta, ni MovimientoStock), todo o nada.
+     */
+    public function test_venta_que_pide_mas_stock_del_disponible_se_rechaza_y_no_crea_nada(): void
+    {
+        $producto = $this->crearProducto(); // stock inicial: 20
+
+        $response = $this->actingAs($this->user)->post(route('ventas.store'), [
+            'medio_pago' => 'efectivo',
+            'items' => [
+                ['producto_id' => $producto->id, 'cantidad' => 21],
+            ],
+        ]);
+
+        $response->assertSessionHasErrors('items');
+        $this->assertSame(0, Venta::count());
+        $this->assertDatabaseCount('items_venta', 0);
+        $this->assertDatabaseMissing('movimientos_stock', [
+            'producto_id' => $producto->id,
+            'tipo' => MovimientoStock::TIPO_VENTA,
+        ]);
+        $this->assertSame(20, $producto->fresh()->stockActual());
+    }
+
+    public function test_venta_que_pide_exactamente_el_stock_disponible_se_acepta(): void
+    {
+        $producto = $this->crearProducto(); // stock inicial: 20
+
+        $response = $this->actingAs($this->user)->post(route('ventas.store'), [
+            'medio_pago' => 'efectivo',
+            'items' => [
+                ['producto_id' => $producto->id, 'cantidad' => 20],
+            ],
+        ]);
+
+        $response->assertRedirect(route('ventas.index'));
+        $this->assertSame(1, Venta::count());
+        $this->assertSame(0, $producto->fresh()->stockActual());
+    }
+
+    /**
+     * Caso real: el mismo producto aparece en más de una fila del carrito
+     * (por ejemplo, escaneado dos veces en vez de sumar la cantidad a
+     * mano). Hay que sumar las cantidades de todas las filas y validar el
+     * total contra el stock, no cada fila por separado.
+     */
+    public function test_carrito_con_producto_repetido_suma_cantidades_para_validar_stock(): void
+    {
+        $producto = $this->crearProducto(); // stock inicial: 20
+
+        $response = $this->actingAs($this->user)->post(route('ventas.store'), [
+            'medio_pago' => 'efectivo',
+            'items' => [
+                ['producto_id' => $producto->id, 'cantidad' => 15],
+                ['producto_id' => $producto->id, 'cantidad' => 10],
+            ],
+        ]);
+
+        $response->assertSessionHasErrors('items');
+        $this->assertSame(0, Venta::count());
+        $this->assertDatabaseCount('items_venta', 0);
+        $this->assertSame(20, $producto->fresh()->stockActual());
+    }
 }
