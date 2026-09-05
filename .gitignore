@@ -22,3 +22,6 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Tooling metadata (Claude Code / Agent Teams Lite), not project source
+.atl/
