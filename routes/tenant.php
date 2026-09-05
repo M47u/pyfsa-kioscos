@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\ClienteController;
+use App\Http\Controllers\ProductoController;
+use App\Http\Controllers\VentaController;
 use App\Http\Middleware\InitializeTenancyByAuthenticatedUser;
 use Illuminate\Support\Facades\Route;
 
@@ -23,5 +26,12 @@ Route::middleware([
 ])->group(function () {
     Route::get('/panel', function () {
         return 'Panel del comercio ' . tenant('id');
-    });
+    })->name('panel');
+
+    Route::resource('productos', ProductoController::class)->except(['show', 'destroy']);
+    Route::post('productos/{producto}/reponer', [ProductoController::class, 'reponerStock'])->name('productos.reponer');
+
+    Route::resource('clientes', ClienteController::class)->only(['index', 'create', 'store', 'show']);
+    Route::post('clientes/{cliente}/pagos', [ClienteController::class, 'registrarPago'])->name('clientes.pagos.store');
+    Route::resource('ventas', VentaController::class)->only(['index', 'create', 'store']);
 });
