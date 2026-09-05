@@ -67,14 +67,17 @@
                 </thead>
                 <tbody>
                     @forelse ($productos as $producto)
-                        @php $bajoMinimo = $producto->bajoMinimo(); @endphp
+                        @php
+                            $stockActual = $producto->stockActual();
+                            $bajoMinimo = $stockActual < $producto->stock_minimo;
+                        @endphp
                         <tr class="border-b border-[#19140035] dark:border-[#3E3E3A] {{ $bajoMinimo ? 'bg-[#fff2f2] dark:bg-[#1D0002]' : '' }}">
                             <td class="py-2 pr-4">{{ $producto->nombre }}</td>
                             <td class="py-2 pr-4">{{ $producto->codigo_barras ?? '—' }}</td>
                             <td class="py-2 pr-4">{{ number_format((float) $producto->precio_costo, 2) }}</td>
                             <td class="py-2 pr-4">{{ number_format((float) $producto->precio_venta, 2) }}</td>
                             <td class="py-2 pr-4 {{ $bajoMinimo ? 'text-[#F53003] dark:text-[#FF4433] font-medium' : '' }}">
-                                {{ $producto->stockActual() }}
+                                {{ $stockActual }}
                                 @if ($bajoMinimo)
                                     <span class="ml-1 text-xs">(bajo mínimo)</span>
                                 @endif
