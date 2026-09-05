@@ -12,6 +12,7 @@ Laravel 12, own git repo (`c:\xampp\htdocs\pyfsa-kioscos`), separate from `Asist
   - **Why**: avoids configuring DNS/hosting per new comercio — no subdomain needed to onboard a client.
   - Central `users` table has a `comercio_id` column (string, FK → `tenants.id`, nullable, `nullOnDelete`) — string not `foreignId` because tenant ids are UUIDs.
 - **Central DB** (auth + subscriptions + tenant registry): `pyfsa_kioscos_central`.
+- **Gotcha de middleware — leer antes de agregar rutas con binding implícito**: `bootstrap/app.php` fuerza `InitializeTenancyByAuthenticatedUser` a correr antes que `SubstituteBindings` vía `$middleware->prependToPriorityList()`. Sin eso, el orden default de Laravel deja `SubstituteBindings` (parte del grupo `web`) corriendo ANTES que nuestro middleware de tenancy, así que cualquier ruta con binding implícito de Eloquent (`Producto $producto`, etc.) intenta resolver el modelo contra la base CENTRAL antes de que la tenancy esté inicializada → 500 en producción, con los tests en verde (`TenantTestCase::setUp()` inicializa tenancy a mano y enmascara el bug). Si agregás una ruta nueva con binding implícito dentro del grupo de `routes/tenant.php`, este fix ya la cubre — pero si tocás `bootstrap/app.php` o el orden de middlewares, revisá esto primero.
 
 ## Local environment — READ BEFORE TOUCHING MYSQL
 
@@ -43,12 +44,13 @@ Gotcha: the `mysql` CLI at `c:/xampp/mysql/bin/mysql.exe` is MariaDB's client an
 
 - `phpunit.xml` corre contra MySQL 8 real en `127.0.0.1:3306` (usuario `root`/`root`), base central de testing `pyfsa_kioscos_central_testing` — **nunca** sqlite in-memory, porque `stancl/tenancy` es database-per-tenant sobre MySQL real: crear un `Comercio` en un test dispara `CreateDatabase`/`MigrateDatabase` de verdad contra el servidor. La base `pyfsa_kioscos_central_testing` tiene que existir de antemano (se crea una sola vez a mano, RefreshDatabase solo corre las migraciones).
 - `tests/Feature/TenantTestCase.php` es la base para tests de features tenant-scoped: crea un `Comercio` + `User` reales, inicializa la tenancy en `setUp()`, y en `tearDown()` termina la tenancy y borra el `Comercio` (dispara `DeleteDatabase`, limpia la base del tenant de verdad). Cada test corre contra su propia base de datos MySQL real, creada y destruida al vuelo.
-- `php artisan test` — 9 tests pasando (Producto: alta, reposición, bajo mínimo, búsqueda por nombre/código; Venta: efectivo, fiado, fiado sin cliente falla, medio de pago inválido falla).
+- `php artisan test` — 15 tests pasando (49 assertions). Producto: alta, reposición, bajo mínimo, búsqueda por nombre/código (con escape de comodines `%`/`_`), stock_minimo vacío usa default 0, y una regresión clave que NO reusa la tenancy pre-inicializada de `TenantTestCase` (termina tenancy a mano y deja que el middleware real la reinicialice dentro del pipeline HTTP) para poder detectar el gotcha de middleware de arriba. Cliente: alta, límite de crédito vacío usa default 0. Venta: efectivo, fiado, fiado sin cliente falla, medio de pago inválido falla. Welcome: `GET /` responde 200 (cobertura mínima de la ruta pública, fuera de cualquier tenant).
 
 ## Key files
 
 - `app/Models/Comercio.php`, `app/Models/User.php`
 - `app/Http/Middleware/InitializeTenancyByAuthenticatedUser.php`
+- `bootstrap/app.php` — `prependToPriorityList()` forces the tenancy middleware to run before `SubstituteBindings` (see gotcha above)
 - `config/tenancy.php` — `tenant_model` points at `Comercio`
 - `routes/tenant.php`, `routes/web.php`
 - `database/migrations/2026_09_05_022300_add_comercio_id_to_users_table.php`
