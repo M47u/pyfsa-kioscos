@@ -9,7 +9,7 @@
         value="{{ old('nombre', $cliente->nombre) }}"
         required
         autofocus
-        class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-transparent px-3 py-2 text-sm"
+        class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
     >
 </div>
 
@@ -20,7 +20,7 @@
         type="text"
         name="telefono"
         value="{{ old('telefono', $cliente->telefono) }}"
-        class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-transparent px-3 py-2 text-sm"
+        class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
     >
 </div>
 
@@ -33,6 +33,6 @@
         min="0"
         name="limite_credito"
         value="{{ old('limite_credito', $cliente->limite_credito ?? 0) }}"
-        class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-transparent px-3 py-2 text-sm"
+        class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
     >
 </div>

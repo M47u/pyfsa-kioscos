@@ -23,7 +23,7 @@
             value="{{ $buscar }}"
             placeholder="Buscar por nombre o código de barras..."
             autofocus
-            class="flex-1 rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-transparent px-3 py-2 text-sm"
+            class="flex-1 rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
         >
         <button
             type="submit"
@@ -74,7 +74,7 @@
                                     min="1"
                                     placeholder="Cant."
                                     required
-                                    class="w-20 rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-transparent px-2 py-1 text-sm"
+                                    class="w-20 rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-2 py-1 text-sm"
                                 >
                                 <button
                                     type="submit"

@@ -59,7 +59,7 @@
                 min="0.01"
                 placeholder="Monto"
                 required
-                class="flex-1 rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-transparent px-3 py-2 text-sm"
+                class="flex-1 rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
             >
             <button
                 type="submit"

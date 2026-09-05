@@ -9,7 +9,7 @@
         value="{{ old('nombre', $producto->nombre) }}"
         required
         autofocus
-        class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-transparent px-3 py-2 text-sm"
+        class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
     >
 </div>
 
@@ -20,7 +20,7 @@
         type="text"
         name="codigo_barras"
         value="{{ old('codigo_barras', $producto->codigo_barras) }}"
-        class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-transparent px-3 py-2 text-sm"
+        class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
     >
 </div>
 
@@ -35,7 +35,7 @@
             name="precio_costo"
             value="{{ old('precio_costo', $producto->precio_costo) }}"
             required
-            class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-transparent px-3 py-2 text-sm"
+            class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
         >
     </div>
 
@@ -49,7 +49,7 @@
             name="precio_venta"
             value="{{ old('precio_venta', $producto->precio_venta) }}"
             required
-            class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-transparent px-3 py-2 text-sm"
+            class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
         >
     </div>
 </div>
@@ -63,6 +63,6 @@
         min="0"
         name="stock_minimo"
         value="{{ old('stock_minimo', $producto->stock_minimo ?? 0) }}"
-        class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-transparent px-3 py-2 text-sm"
+        class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
     >
 </div>
