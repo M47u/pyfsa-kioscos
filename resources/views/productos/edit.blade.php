@@ -1,40 +1,28 @@
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ config('app.name', 'Laravel') }} - Editar producto</title>
-    @vite(['resources/css/app.css'])
-</head>
-<body class="bg-[#FDFDFC] dark:bg-[#0a0a0a] text-[#1b1b18] dark:text-[#EDEDEC] min-h-screen flex items-center justify-center p-6">
-    <div class="w-full max-w-sm">
-        <h1 class="text-lg font-medium mb-6 text-center">Editar producto</h1>
+@extends('layouts.app')
 
-        @if ($errors->any())
-            <div class="mb-4 rounded-sm bg-[#fff2f2] dark:bg-[#1D0002] border border-[#F53003] text-[#F53003] dark:text-[#FF4433] px-4 py-3 text-sm">
-                <ul class="list-disc list-inside">
-                    @foreach ($errors->all() as $error)
-                        <li>{{ $error }}</li>
-                    @endforeach
-                </ul>
-            </div>
-        @endif
+@section('title', 'Editar producto')
 
-        <form method="POST" action="{{ route('productos.update', $producto) }}" class="space-y-4">
-            @method('PUT')
-            @include('productos._form')
+@section('body-class', 'flex items-center justify-center p-6')
+@section('container-class', 'w-full max-w-sm')
 
-            <button
-                type="submit"
-                class="w-full rounded-sm bg-[#1b1b18] dark:bg-[#eeeeec] text-white dark:text-[#1C1C1A] px-5 py-2 text-sm font-medium"
-            >
-                Guardar cambios
-            </button>
-        </form>
+@section('content')
+    <h1 class="text-lg font-medium mb-6 text-center">Editar producto</h1>
 
-        <div class="mt-4 text-center">
-            <a href="{{ route('productos.index') }}" class="text-sm underline">Volver a productos</a>
-        </div>
+    <x-validation-errors />
+
+    <form method="POST" action="{{ route('productos.update', $producto) }}" class="space-y-4">
+        @method('PUT')
+        @include('productos._form')
+
+        <button
+            type="submit"
+            class="w-full rounded-sm bg-[#1b1b18] dark:bg-[#eeeeec] text-white dark:text-[#1C1C1A] px-5 py-2 text-sm font-medium"
+        >
+            Guardar cambios
+        </button>
+    </form>
+
+    <div class="mt-4 text-center">
+        <a href="{{ route('productos.index') }}" class="text-sm underline">Volver a productos</a>
     </div>
-</body>
-</html>
+@endsection
