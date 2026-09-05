@@ -276,6 +276,43 @@ class ProductoTest extends TenantTestCase
     }
 
     /**
+     * ?bajo_minimo=1 (usado por el link "Ver productos" del resumen de
+     * stock bajo mínimo en Reportes, ver ReporteController) devuelve solo
+     * los productos por debajo de su mínimo, sin tocar el comportamiento
+     * de ?buscar= (ver test_busqueda_por_nombre arriba, que sigue pasando
+     * sin este filtro).
+     */
+    public function test_filtro_bajo_minimo_devuelve_solo_productos_bajo_minimo(): void
+    {
+        $conStock = Producto::create([
+            'nombre' => 'Con stock',
+            'codigo_barras' => null,
+            'precio_costo' => 800,
+            'precio_venta' => 1200,
+            'stock_minimo' => 5,
+        ]);
+        $conStock->movimientos()->create([
+            'tipo' => MovimientoStock::TIPO_REPOSICION,
+            'cantidad' => 10,
+            'user_id' => $this->user->id,
+        ]);
+
+        Producto::create([
+            'nombre' => 'Sin stock',
+            'codigo_barras' => null,
+            'precio_costo' => 800,
+            'precio_venta' => 1200,
+            'stock_minimo' => 5,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('productos.index', ['bajo_minimo' => 1]));
+
+        $response->assertOk();
+        $response->assertSee('Sin stock');
+        $response->assertDontSee('Con stock');
+    }
+
+    /**
      * El buscador de productos en el carrito de Ventas (ver
      * ventas/create.blade.php) le pega a esta misma ruta con
      * Accept: application/json en vez de un <select> con el catálogo
