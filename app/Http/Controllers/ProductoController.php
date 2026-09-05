@@ -8,19 +8,40 @@ use App\Http\Requests\ProductoRequest;
 use App\Http\Requests\ReponerStockRequest;
 use App\Models\MovimientoStock;
 use App\Models\Producto;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
 class ProductoController extends Controller
 {
-    public function index(): View
+    /**
+     * Con Accept: application/json devuelve las coincidencias como JSON en
+     * vez de la vista completa — lo usa el buscador de Ventas (ver
+     * ventas/create.blade.php), pensado para un lector de código de barras
+     * USB/Bluetooth: el lector "tipea" el código y manda Enter, no sirve un
+     * <select> con todo el catálogo (impracticable ya con unos pocos
+     * cientos de productos, y un lector no interactúa con un dropdown).
+     * limit(20) porque es para un buscador en vivo, no para listar el
+     * catálogo completo (eso lo sigue haciendo la vista HTML sin límite).
+     */
+    public function index(): View|JsonResponse
     {
         $buscar = request()->string('buscar')->toString();
 
         $productos = Producto::query()
             ->when($buscar !== '', fn ($query) => $query->search($buscar))
             ->orderBy('nombre')
+            ->when(request()->wantsJson(), fn ($query) => $query->limit(20))
             ->get();
+
+        if (request()->wantsJson()) {
+            return response()->json($productos->map(fn (Producto $producto) => [
+                'id' => $producto->id,
+                'nombre' => $producto->nombre,
+                'codigo_barras' => $producto->codigo_barras,
+                'precio_venta' => (float) $producto->precio_venta,
+            ]));
+        }
 
         return view('productos.index', [
             'productos' => $productos,

@@ -25,10 +25,17 @@ class VentaController extends Controller
         ]);
     }
 
+    /**
+     * No le pasamos el catálogo completo de productos a la vista: con más
+     * de unos pocos cientos de productos, volcarlos todos en un <select>
+     * deja de ser usable (y no es compatible con un lector de código de
+     * barras, que necesita un input de texto donde "tipear" el código, no
+     * un dropdown). El buscador de productos en el carrito hace fetch
+     * contra ProductoController::index() con Accept: application/json.
+     */
     public function create(): View
     {
         return view('ventas.create', [
-            'productos' => Producto::query()->orderBy('nombre')->get(),
             'clientes' => Cliente::query()->orderBy('nombre')->get(),
         ]);
     }

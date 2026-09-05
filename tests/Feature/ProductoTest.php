@@ -227,4 +227,40 @@ class ProductoTest extends TenantTestCase
         $response->assertSee('Sprite 1.5L');
         $response->assertDontSee('Coca Cola 1.5L');
     }
+
+    /**
+     * El buscador de productos en el carrito de Ventas (ver
+     * ventas/create.blade.php) le pega a esta misma ruta con
+     * Accept: application/json en vez de un <select> con el catálogo
+     * entero — no es usable pasados unos pocos cientos de productos, y no
+     * es compatible con un lector de código de barras.
+     */
+    public function test_buscar_productos_con_accept_json_devuelve_json(): void
+    {
+        Producto::create([
+            'nombre' => 'Coca Cola 1.5L',
+            'codigo_barras' => '7790895000000',
+            'precio_costo' => 800,
+            'precio_venta' => 1200,
+            'stock_minimo' => 5,
+        ]);
+
+        Producto::create([
+            'nombre' => 'Sprite 1.5L',
+            'codigo_barras' => '7790895000001',
+            'precio_costo' => 800,
+            'precio_venta' => 1200,
+            'stock_minimo' => 5,
+        ]);
+
+        $response = $this->actingAs($this->user)->getJson(route('productos.index', ['buscar' => '7790895000001']));
+
+        $response->assertOk();
+        $response->assertJsonCount(1);
+        $response->assertJsonFragment([
+            'nombre' => 'Sprite 1.5L',
+            'codigo_barras' => '7790895000001',
+            'precio_venta' => 1200.0,
+        ]);
+    }
 }
