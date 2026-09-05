@@ -172,6 +172,37 @@ class ProductoTest extends TenantTestCase
         ]);
     }
 
+    /**
+     * Regresión: scopeSearch interpolaba el término crudo en el LIKE, sin
+     * escapar los metacaracteres % y _. Un nombre que contenga un '%'
+     * literal terminaba matcheando de más (el '%' del término se
+     * interpretaba como wildcard en vez de caracter literal).
+     */
+    public function test_busqueda_escapa_comodines_de_like(): void
+    {
+        Producto::create([
+            'nombre' => 'Combo 50% off',
+            'codigo_barras' => '1111111111111',
+            'precio_costo' => 800,
+            'precio_venta' => 1200,
+            'stock_minimo' => 5,
+        ]);
+
+        Producto::create([
+            'nombre' => 'Combo 50X off',
+            'codigo_barras' => '2222222222222',
+            'precio_costo' => 800,
+            'precio_venta' => 1200,
+            'stock_minimo' => 5,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('productos.index', ['buscar' => '50%']));
+
+        $response->assertOk();
+        $response->assertSee('Combo 50% off');
+        $response->assertDontSee('Combo 50X off');
+    }
+
     public function test_busqueda_por_codigo_de_barras(): void
     {
         Producto::create([

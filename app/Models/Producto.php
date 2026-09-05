@@ -53,6 +53,12 @@ class Producto extends Model
      */
     public function scopeSearch(Builder $query, string $term): Builder
     {
+        // Escapar metacaracteres de LIKE (% y _) y la barra invertida que
+        // los escapa a ellos, para que un término de búsqueda que los
+        // contenga literalmente (código de barras, nombre de producto) no
+        // sea interpretado como wildcard y matchee de más.
+        $term = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $term);
+
         return $query->where(function (Builder $query) use ($term) {
             $query->where('nombre', 'like', "%{$term}%")
                 ->orWhere('codigo_barras', 'like', "%{$term}%");
