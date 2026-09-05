@@ -32,6 +32,10 @@ class ProductoRequest extends FormRequest
         if ($this->input('stock_minimo') === null) {
             $this->merge(['stock_minimo' => 0]);
         }
+
+        if ($this->input('stock_inicial') === null) {
+            $this->merge(['stock_inicial' => 0]);
+        }
     }
 
     /**
@@ -52,6 +56,10 @@ class ProductoRequest extends FormRequest
             'precio_costo' => ['required', 'numeric', 'min:0'],
             'precio_venta' => ['required', 'numeric', 'min:0'],
             'stock_minimo' => ['nullable', 'integer', 'min:0'],
+            // Solo se usa en el alta (ver ProductoController::store). No es
+            // columna de `productos` — genera un MovimientoStock de
+            // reposición, porque el stock nunca se guarda directo.
+            'stock_inicial' => ['nullable', 'integer', 'min:0'],
         ];
     }
 }

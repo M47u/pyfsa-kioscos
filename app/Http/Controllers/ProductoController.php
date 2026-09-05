@@ -56,9 +56,25 @@ class ProductoController extends Controller
         ]);
     }
 
+    /**
+     * `stock_inicial` no es columna de `productos`: si viene con valor, se
+     * traduce en un MovimientoStock de reposición recién creado el producto
+     * (mismo mecanismo que reponerStock), para no romper la regla de que el
+     * stock nunca se guarda ni edita directo — ver Producto::stockActual().
+     */
     public function store(ProductoRequest $request): RedirectResponse
     {
-        Producto::create($request->validated());
+        $producto = Producto::create($request->safe()->except('stock_inicial'));
+
+        $stockInicial = (int) $request->validated('stock_inicial');
+
+        if ($stockInicial > 0) {
+            $producto->movimientos()->create([
+                'tipo' => MovimientoStock::TIPO_REPOSICION,
+                'cantidad' => $stockInicial,
+                'user_id' => auth()->id(),
+            ]);
+        }
 
         return redirect()->route('productos.index')->with('status', 'Producto creado correctamente.');
     }

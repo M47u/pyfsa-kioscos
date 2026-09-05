@@ -27,6 +27,53 @@ class ProductoTest extends TenantTestCase
         ]);
     }
 
+    public function test_alta_de_producto_con_stock_inicial_crea_movimiento_de_reposicion(): void
+    {
+        $response = $this->actingAs($this->user)->post(route('productos.store'), [
+            'nombre' => 'Coca Cola 1.5L',
+            'codigo_barras' => '7790895000000',
+            'precio_costo' => 800,
+            'precio_venta' => 1200,
+            'stock_minimo' => 5,
+            'stock_inicial' => 24,
+        ]);
+
+        $response->assertRedirect(route('productos.index'));
+
+        $producto = Producto::where('codigo_barras', '7790895000000')->firstOrFail();
+
+        $this->assertSame(24, $producto->stockActual());
+        $this->assertDatabaseHas('movimientos_stock', [
+            'producto_id' => $producto->id,
+            'tipo' => MovimientoStock::TIPO_REPOSICION,
+            'cantidad' => 24,
+            'user_id' => $this->user->id,
+        ]);
+    }
+
+    /**
+     * Sin stock_inicial (o en cero) no debe crear un movimiento de
+     * reposición "vacío" — un producto recién dado de alta arranca en 0
+     * sin necesidad de un registro en movimientos_stock.
+     */
+    public function test_alta_de_producto_sin_stock_inicial_no_crea_movimiento(): void
+    {
+        $response = $this->actingAs($this->user)->post(route('productos.store'), [
+            'nombre' => 'Fideos 500g',
+            'codigo_barras' => null,
+            'precio_costo' => 500,
+            'precio_venta' => 800,
+            'stock_minimo' => 5,
+        ]);
+
+        $response->assertRedirect(route('productos.index'));
+
+        $producto = Producto::where('nombre', 'Fideos 500g')->firstOrFail();
+
+        $this->assertSame(0, $producto->stockActual());
+        $this->assertDatabaseCount('movimientos_stock', 0);
+    }
+
     public function test_reponer_stock_sube_stock_actual(): void
     {
         $producto = Producto::create([
