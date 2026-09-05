@@ -13,19 +13,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('movimientos_stock', function (Blueprint $table) {
+        Schema::create('ventas', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('producto_id')->constrained('productos')->cascadeOnDelete();
-            // 'reposicion' (suma) | 'venta' (resta) — ver MovimientoStock.
-            $table->string('tipo');
-            // Puede ser negativo: reposición siempre positiva, venta siempre
-            // negativa. El stock actual de un producto = SUM(cantidad).
-            $table->integer('cantidad');
+            // Solo se completa cuando medio_pago = 'fiado' (ver VentaRequest).
+            $table->foreignId('cliente_id')->nullable()->constrained('clientes')->nullOnDelete();
             // Sin foreign key: users vive en la base CENTRAL
             // (pyfsa_kioscos_central) y esta tabla vive en la base del tenant,
             // son conexiones/bases distintas y MySQL no soporta FK
-            // cross-database. Queda como referencia simple al id del usuario.
+            // cross-database (mismo patron que movimientos_stock).
             $table->unsignedBigInteger('user_id');
+            // efectivo | transferencia | fiado (ver Venta y VentaRequest).
+            $table->string('medio_pago');
+            $table->decimal('total', 10, 2);
             $table->timestamps();
         });
     }
@@ -35,6 +34,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('movimientos_stock');
+        Schema::dropIfExists('ventas');
     }
 };

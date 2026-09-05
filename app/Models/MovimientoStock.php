@@ -17,7 +17,7 @@ class MovimientoStock extends Model
 {
     public const TIPO_REPOSICION = 'reposicion';
 
-    // Reservado para el futuro módulo de Ventas — no se usa todavía.
+    // Usado por VentaController::store con cantidad negativa.
     public const TIPO_VENTA = 'venta';
 
     protected $table = 'movimientos_stock';

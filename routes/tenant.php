@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\ProductoController;
+use App\Http\Controllers\VentaController;
 use App\Http\Middleware\InitializeTenancyByAuthenticatedUser;
 use Illuminate\Support\Facades\Route;
 
@@ -28,4 +30,7 @@ Route::middleware([
 
     Route::resource('productos', ProductoController::class)->except(['show', 'destroy']);
     Route::post('productos/{producto}/reponer', [ProductoController::class, 'reponerStock'])->name('productos.reponer');
+
+    Route::resource('clientes', ClienteController::class)->only(['index', 'create', 'store']);
+    Route::resource('ventas', VentaController::class)->only(['index', 'create', 'store']);
 });
