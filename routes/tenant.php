@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\ClienteController;
+use App\Http\Controllers\PanelController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\VentaController;
 use App\Http\Middleware\InitializeTenancyByAuthenticatedUser;
@@ -24,9 +25,7 @@ Route::middleware([
     'auth',
     InitializeTenancyByAuthenticatedUser::class,
 ])->group(function () {
-    Route::get('/panel', function () {
-        return 'Panel del comercio ' . tenant('id');
-    })->name('panel');
+    Route::get('/panel', [PanelController::class, 'index'])->name('panel');
 
     Route::resource('productos', ProductoController::class)->except(['show', 'destroy']);
     Route::post('productos/{producto}/reponer', [ProductoController::class, 'reponerStock'])->name('productos.reponer');
