@@ -135,8 +135,17 @@ return [
          * packages that use asset() calls inside the tenant app. To avoid such issues, you can
          * disable asset() helper tenancy and explicitly use tenant_asset() calls in places
          * where you want to use tenant-specific assets (product images, avatars, etc).
+         *
+         * Desactivado: @vite() usa asset() por dentro para armar la URL del
+         * bundle de CSS/JS (public/build/assets/...), que es el MISMO para
+         * todos los comercios. Con esto en true, esas URLs se reescribían
+         * con el prefijo /tenancy/assets/... en cualquier ruta de tenant
+         * (todo excepto /login), rompiendo el CSS/JS en toda la app menos
+         * en la pantalla de login. Si en el futuro hace falta servir un
+         * archivo propio de cada comercio (foto de producto, etc.), se usa
+         * tenant_asset() explícitamente ahí, no este flag global.
          */
-        'asset_helper_tenancy' => true,
+        'asset_helper_tenancy' => false,
     ],
 
     /**
