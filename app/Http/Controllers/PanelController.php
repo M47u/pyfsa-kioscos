@@ -9,10 +9,10 @@ use Illuminate\View\View;
 class PanelController extends Controller
 {
     /**
-     * Puerta de entrada real al comercio una vez logueado. Todavía no hay
-     * datos agregados/estadísticas acá (eso es el módulo de Reportes,
-     * a propósito fuera de alcance) — solo bienvenida + accesos directos
-     * a las secciones ya existentes.
+     * Puerta de entrada real al comercio una vez logueado: bienvenida +
+     * accesos directos a las secciones existentes (Productos/Clientes/
+     * Ventas/Reportes). Los datos agregados/estadísticas viven en
+     * ReporteController, no acá.
      */
     public function index(): View
     {

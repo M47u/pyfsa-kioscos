@@ -30,6 +30,12 @@
             >
                 Ventas
             </a>
+            <a
+                href="{{ route('reportes.index') }}"
+                class="{{ request()->routeIs('reportes.*') ? 'underline font-medium' : '' }}"
+            >
+                Reportes
+            </a>
         </div>
 
         <form method="POST" action="{{ route('logout') }}">

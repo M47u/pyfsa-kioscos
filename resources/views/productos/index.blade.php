@@ -16,7 +16,22 @@
     <x-status-banner />
     <x-validation-errors />
 
+    {{-- Link desde el resumen de stock bajo mínimo en Reportes (ver
+         ReporteController): ?bajo_minimo=1 filtra el listado a solo esos
+         productos. Se preserva con un hidden al buscar por nombre/código
+         para que ambos filtros puedan combinarse en vez de que buscar
+         pise silenciosamente el filtro anterior. --}}
+    @if ($bajoMinimo)
+        <div class="mb-4 flex items-center justify-between rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-[#f5f5f4] dark:bg-[#161615] px-3 py-2 text-sm">
+            <span>Mostrando solo productos bajo el stock mínimo.</span>
+            <a href="{{ route('productos.index', ['buscar' => $buscar]) }}" class="underline">Quitar filtro</a>
+        </div>
+    @endif
+
     <form method="GET" action="{{ route('productos.index') }}" class="mb-6 flex gap-2">
+        @if ($bajoMinimo)
+            <input type="hidden" name="bajo_minimo" value="1">
+        @endif
         <input
             type="text"
             name="buscar"

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\PanelController;
 use App\Http\Controllers\ProductoController;
+use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\VentaController;
 use App\Http\Controllers\ZonaHorariaController;
 use App\Http\Middleware\EnsureComercioTimezoneIsConfigured;
@@ -32,6 +33,8 @@ Route::middleware([
     Route::post('/zona-horaria', [ZonaHorariaController::class, 'update'])->name('zona-horaria.update');
 
     Route::get('/panel', [PanelController::class, 'index'])->name('panel');
+
+    Route::get('/reportes', [ReporteController::class, 'index'])->name('reportes.index');
 
     Route::resource('productos', ProductoController::class)->except(['show', 'destroy']);
     Route::post('productos/{producto}/reponer', [ProductoController::class, 'reponerStock'])->name('productos.reponer');

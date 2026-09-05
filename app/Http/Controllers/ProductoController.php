@@ -28,11 +28,25 @@ class ProductoController extends Controller
     {
         $buscar = request()->string('buscar')->toString();
 
+        // Filtro usado por el link "Ver productos" del resumen de stock
+        // bajo mínimo en Reportes (ver ReporteController). Compatible con
+        // ?buscar= al mismo tiempo si algún día hace falta combinarlos,
+        // pero el caso de uso real de hoy es bajo_minimo solo.
+        $bajoMinimo = request()->boolean('bajo_minimo');
+
         $productos = Producto::query()
             ->when($buscar !== '', fn ($query) => $query->search($buscar))
             ->orderBy('nombre')
             ->when(request()->wantsJson(), fn ($query) => $query->limit(20))
             ->get();
+
+        if ($bajoMinimo) {
+            // Filtro en memoria sobre la colección ya traída: el resultado
+            // esperado es chico (solo los productos bajo mínimo), así que
+            // llamar bajoMinimo() por fila acá no reintroduce el N+1 que sí
+            // importaría en el listado completo sin filtrar.
+            $productos = $productos->filter(fn (Producto $producto) => $producto->bajoMinimo())->values();
+        }
 
         if (request()->wantsJson()) {
             return response()->json($productos->map(fn (Producto $producto) => [
@@ -46,6 +60,7 @@ class ProductoController extends Controller
         return view('productos.index', [
             'productos' => $productos,
             'buscar' => $buscar,
+            'bajoMinimo' => $bajoMinimo,
         ]);
     }
 

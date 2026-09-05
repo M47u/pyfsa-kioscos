@@ -8,7 +8,7 @@
 
     <x-status-banner />
 
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <a
             href="{{ route('productos.index') }}"
             class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] p-4 hover:bg-[#f5f5f4] dark:hover:bg-[#161615]"
@@ -31,6 +31,14 @@
         >
             <h2 class="text-sm font-medium mb-1">Ventas</h2>
             <p class="text-sm opacity-70">Ver historial y registrar una venta nueva.</p>
+        </a>
+
+        <a
+            href="{{ route('reportes.index') }}"
+            class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] p-4 hover:bg-[#f5f5f4] dark:hover:bg-[#161615]"
+        >
+            <h2 class="text-sm font-medium mb-1">Reportes</h2>
+            <p class="text-sm opacity-70">Ventas de la semana, cuentas por cobrar y stock bajo mínimo.</p>
         </a>
     </div>
 @endsection
