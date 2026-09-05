@@ -37,6 +37,15 @@ abstract class TenantTestCase extends TestCase
 
         $this->comercio = Comercio::create();
 
+        // La zona horaria se elige una sola vez, al primer uso (ver
+        // EnsureComercioTimezoneIsConfigured) — sin esto, CUALQUIER test
+        // que pegue contra una ruta del panel quedaría redirigido a
+        // /zona-horaria en vez de ver la respuesta que espera. El propio
+        // gate y el flujo de configuración tienen su test dedicado en
+        // ZonaHorariaTest, que arma su comercio SIN zona horaria a propósito.
+        $this->comercio->timezone = 'America/Argentina/Buenos_Aires';
+        $this->comercio->save();
+
         $this->user = User::factory()->create([
             'comercio_id' => $this->comercio->id,
         ]);

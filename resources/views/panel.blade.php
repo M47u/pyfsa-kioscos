@@ -6,6 +6,8 @@
     <h1 class="text-lg font-medium mb-2">Bienvenido</h1>
     <p class="text-sm opacity-70 mb-6">Comercio: {{ $comercioId }}</p>
 
+    <x-status-banner />
+
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <a
             href="{{ route('productos.index') }}"

@@ -6,6 +6,8 @@ use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\PanelController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\VentaController;
+use App\Http\Controllers\ZonaHorariaController;
+use App\Http\Middleware\EnsureComercioTimezoneIsConfigured;
 use App\Http\Middleware\InitializeTenancyByAuthenticatedUser;
 use Illuminate\Support\Facades\Route;
 
@@ -24,7 +26,11 @@ Route::middleware([
     'web',
     'auth',
     InitializeTenancyByAuthenticatedUser::class,
+    EnsureComercioTimezoneIsConfigured::class,
 ])->group(function () {
+    Route::get('/zona-horaria', [ZonaHorariaController::class, 'edit'])->name('zona-horaria.edit');
+    Route::post('/zona-horaria', [ZonaHorariaController::class, 'update'])->name('zona-horaria.update');
+
     Route::get('/panel', [PanelController::class, 'index'])->name('panel');
 
     Route::resource('productos', ProductoController::class)->except(['show', 'destroy']);
