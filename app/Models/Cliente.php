@@ -55,9 +55,15 @@ class Cliente extends Model
      * VentaController::store y la decisión confirmada en CLAUDE.md/documento
      * de alcance — a diferencia del stock, el límite de crédito es una
      * cuestión de confianza que el kiosquero puede decidir pasar por alto).
+     *
+     * Acepta un $saldo ya calculado opcionalmente para que un call site que
+     * ya lo necesitó (por ejemplo para mostrarlo) se lo pase acá en vez de
+     * hacer que este método lo recalcule de cero — mismo patrón que el bug
+     * de doble stockActual() ya arreglado en productos/index. Si no se
+     * pasa nada, se comporta igual que antes.
      */
-    public function superaLimite(): bool
+    public function superaLimite(?float $saldo = null): bool
     {
-        return $this->saldo() > (float) $this->limite_credito;
+        return ($saldo ?? $this->saldo()) > (float) $this->limite_credito;
     }
 }

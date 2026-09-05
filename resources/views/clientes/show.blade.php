@@ -29,7 +29,14 @@
             </div>
         @endif
 
-        @php $saldo = $cliente->saldo(); @endphp
+        {{-- $saldo se calcula UNA sola vez y se pasa a superaLimite() en
+             las dos veces que se usa más abajo, en vez de dejar que cada
+             llamada recalcule saldo() desde cero (mismo bug ya arreglado
+             en productos/index, ver Cliente::superaLimite()). --}}
+        @php
+            $saldo = $cliente->saldo();
+            $superaLimite = $cliente->superaLimite($saldo);
+        @endphp
 
         {{-- Datos del cliente + alerta visual si superó su límite de
              crédito (avisa, no bloquea — ver VentaController::store). --}}
@@ -42,12 +49,12 @@
                 <dd>{{ number_format((float) $cliente->limite_credito, 2) }}</dd>
 
                 <dt class="opacity-70">Saldo actual</dt>
-                <dd class="{{ $cliente->superaLimite() ? 'text-[#F53003] dark:text-[#FF4433] font-medium' : '' }}">
+                <dd class="{{ $superaLimite ? 'text-[#F53003] dark:text-[#FF4433] font-medium' : '' }}">
                     {{ number_format($saldo, 2) }}
                 </dd>
             </dl>
 
-            @if ($cliente->superaLimite())
+            @if ($superaLimite)
                 <div class="mt-3 rounded-sm bg-[#fff2f2] dark:bg-[#1D0002] border border-[#F53003] text-[#F53003] dark:text-[#FF4433] px-3 py-2 text-sm">
                     Este cliente superó su límite de crédito.
                 </div>

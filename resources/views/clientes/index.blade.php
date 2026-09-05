@@ -47,13 +47,14 @@
                 </thead>
                 <tbody>
                     @forelse ($clientes as $cliente)
-                        {{-- saldo() se calcula UNA sola vez por fila y se reusa
-                             para pintar la fila y mostrar el número (bug de
-                             doble query ya arreglado en productos, no
-                             repetirlo acá). --}}
+                        {{-- saldo() se calcula UNA sola vez por fila y se pasa
+                             a superaLimite() (en vez de reimplementar la regla
+                             a mano acá, que podía desincronizarse del método
+                             del modelo) para pintar la fila y mostrar el
+                             número sin recalcular nada. --}}
                         @php
                             $saldo = $cliente->saldo();
-                            $superaLimite = $saldo > (float) $cliente->limite_credito;
+                            $superaLimite = $cliente->superaLimite($saldo);
                         @endphp
                         <tr class="border-b border-[#19140035] dark:border-[#3E3E3A] {{ $superaLimite ? 'bg-[#fff2f2] dark:bg-[#1D0002]' : '' }}">
                             <td class="py-2 pr-4">{{ $cliente->nombre }}</td>

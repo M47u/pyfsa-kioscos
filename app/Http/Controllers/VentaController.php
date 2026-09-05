@@ -128,11 +128,15 @@ class VentaController extends Controller
         if ($data['medio_pago'] === Venta::MEDIO_PAGO_FIADO) {
             $cliente = Cliente::find($data['cliente_id']);
 
-            if ($cliente !== null && $cliente->superaLimite()) {
-                session()->flash(
-                    'advertencia',
-                    "{$cliente->nombre} superó su límite de crédito (saldo: {$cliente->saldo()}, límite: {$cliente->limite_credito})."
-                );
+            if ($cliente !== null) {
+                $saldo = $cliente->saldo();
+
+                if ($cliente->superaLimite($saldo)) {
+                    session()->flash(
+                        'advertencia',
+                        "{$cliente->nombre} superó su límite de crédito (saldo: {$saldo}, límite: {$cliente->limite_credito})."
+                    );
+                }
             }
         }
 
