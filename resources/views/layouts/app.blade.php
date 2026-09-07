@@ -25,8 +25,20 @@
     @vite(['resources/css/app.css'])
 </head>
 <body class="flex flex-col min-h-screen bg-[#FDFDFC] dark:bg-[#0a0a0a] text-[#1b1b18] dark:text-[#EDEDEC]">
+    {{--
+        layouts.nav es el nav de DENTRO de un comercio (Productos/Clientes/
+        Ventas/Reportes) — solo tiene sentido con tenancy inicializada.
+        El panel admin de PyFsa (/admin, ver routes/web.php) es central y
+        corre sin tenancy, así que usa su propio nav mínimo en su lugar
+        (ver layouts.nav-admin) en vez de mostrar secciones de un comercio
+        que acá ni siquiera existe.
+    --}}
     @auth
-        @include('layouts.nav')
+        @if (tenancy()->initialized)
+            @include('layouts.nav')
+        @else
+            @include('layouts.nav-admin')
+        @endif
     @endauth
 
     {{--
