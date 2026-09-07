@@ -6,10 +6,12 @@ use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\PanelController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\ReporteController;
+use App\Http\Controllers\UsuarioController;
 use App\Http\Controllers\VentaController;
 use App\Http\Controllers\ZonaHorariaController;
 use App\Http\Middleware\EnsureComercioSuscripcionActiva;
 use App\Http\Middleware\EnsureComercioTimezoneIsConfigured;
+use App\Http\Middleware\EnsureUserIsDueno;
 use App\Http\Middleware\InitializeTenancyByAuthenticatedUser;
 use Illuminate\Support\Facades\Route;
 
@@ -35,17 +37,26 @@ Route::middleware([
         return view('suscripcion-vencida');
     })->name('suscripcion-vencida');
 
-    Route::get('/zona-horaria', [ZonaHorariaController::class, 'edit'])->name('zona-horaria.edit');
-    Route::post('/zona-horaria', [ZonaHorariaController::class, 'update'])->name('zona-horaria.update');
-
     Route::get('/panel', [PanelController::class, 'index'])->name('panel');
-
-    Route::get('/reportes', [ReporteController::class, 'index'])->name('reportes.index');
-
-    Route::resource('productos', ProductoController::class)->except(['show', 'destroy']);
-    Route::post('productos/{producto}/reponer', [ProductoController::class, 'reponerStock'])->name('productos.reponer');
 
     Route::resource('clientes', ClienteController::class)->only(['index', 'create', 'store', 'show']);
     Route::post('clientes/{cliente}/pagos', [ClienteController::class, 'registrarPago'])->name('clientes.pagos.store');
     Route::resource('ventas', VentaController::class)->only(['index', 'create', 'store']);
+
+    // Dueño-only (documento de alcance, módulo 3.5 "Usuarios"): sin
+    // permisos granulares, el empleado solo vende y cobra fiado (arriba).
+    // Todo lo demás (Productos, Reportes, Zona horaria, gestión de
+    // Usuarios) queda detrás de EnsureUserIsDueno, en un sub-grupo anidado
+    // para no duplicar el árbol de rutas ni el resto del middleware stack.
+    Route::middleware(EnsureUserIsDueno::class)->group(function () {
+        Route::get('/zona-horaria', [ZonaHorariaController::class, 'edit'])->name('zona-horaria.edit');
+        Route::post('/zona-horaria', [ZonaHorariaController::class, 'update'])->name('zona-horaria.update');
+
+        Route::get('/reportes', [ReporteController::class, 'index'])->name('reportes.index');
+
+        Route::resource('productos', ProductoController::class)->except(['show', 'destroy']);
+        Route::post('productos/{producto}/reponer', [ProductoController::class, 'reponerStock'])->name('productos.reponer');
+
+        Route::resource('usuarios', UsuarioController::class)->only(['index', 'create', 'store']);
+    });
 });

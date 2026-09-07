@@ -59,8 +59,16 @@ abstract class TenantTestCase extends TestCase
         $this->comercio->estado_suscripcion = Comercio::ESTADO_PRUEBA;
         $this->comercio->save();
 
+        // rol explícito en 'dueño' (aunque sea el default de la migración):
+        // el objeto en memoria de create() nunca relee el default aplicado
+        // por la DB (mismo motivo que el comentario de estado_suscripcion
+        // arriba), y actingAs() usa esta instancia tal cual, sin releerla
+        // — sin esto, $this->user->esDueno() daría false en cualquier test
+        // que dependa del gate de rol (ver RolTest), aunque la fila en la
+        // base sí tenga 'dueño'.
         $this->user = User::factory()->create([
             'comercio_id' => $this->comercio->id,
+            'rol' => User::ROL_DUENO,
         ]);
 
         tenancy()->initialize($this->comercio);

@@ -7,17 +7,22 @@
      Responsive sin JS propio: <details>/<summary> es un disclosure nativo
      del navegador — el ☰ de mobile no necesita ni una línea de JavaScript
      para abrir/cerrar (clickear un link navega y listo, no hace falta
-     cerrarlo a mano). Los mismos 4 links se listan una sola vez en
+     cerrarlo a mano). Los mismos links se listan una sola vez en
      $secciones y se pintan dos veces (fila horizontal desde sm:, columna
      colapsable antes de eso) para que agregar una sección no signifique
-     tocar el markup en dos lugares. --}}
+     tocar el markup en dos lugares.
+
+     Roles (documento de alcance, módulo 3.5 "Usuarios"): Productos,
+     Reportes y Usuarios son dueño-only (mismo gate que EnsureUserIsDueno
+     en routes/tenant.php) — un empleado solo ve Ventas y Clientes acá. --}}
 @php
-    $secciones = [
-        ['ruta' => 'productos.index', 'activo' => 'productos.*', 'label' => 'Productos'],
-        ['ruta' => 'clientes.index', 'activo' => 'clientes.*', 'label' => 'Clientes'],
-        ['ruta' => 'ventas.index', 'activo' => 'ventas.*', 'label' => 'Ventas'],
-        ['ruta' => 'reportes.index', 'activo' => 'reportes.*', 'label' => 'Reportes'],
-    ];
+    $secciones = collect([
+        ['ruta' => 'productos.index', 'activo' => 'productos.*', 'label' => 'Productos', 'dueno' => true],
+        ['ruta' => 'clientes.index', 'activo' => 'clientes.*', 'label' => 'Clientes', 'dueno' => false],
+        ['ruta' => 'ventas.index', 'activo' => 'ventas.*', 'label' => 'Ventas', 'dueno' => false],
+        ['ruta' => 'reportes.index', 'activo' => 'reportes.*', 'label' => 'Reportes', 'dueno' => true],
+        ['ruta' => 'usuarios.index', 'activo' => 'usuarios.*', 'label' => 'Usuarios', 'dueno' => true],
+    ])->filter(fn ($seccion) => ! $seccion['dueno'] || auth()->user()->esDueno());
 @endphp
 
 <nav class="border-b border-[#19140035] dark:border-[#3E3E3A]">
