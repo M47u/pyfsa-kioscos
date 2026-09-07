@@ -4,6 +4,24 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ config('app.name', 'Laravel') }}@hasSection('title') - @yield('title')@endif</title>
+
+    {{--
+        Instalable, no offline: el manifest + el service worker de abajo
+        alcanzan para que el navegador ofrezca "Agregar a pantalla de
+        inicio", pero sw.js es un no-op a propósito — el offline real
+        (Ventas/Fiado con Service Worker + IndexedDB) es una fase aparte
+        del documento de alcance, ver el gotcha en CLAUDE.md.
+    --}}
+    <link rel="manifest" href="{{ asset('manifest.webmanifest') }}">
+    <meta name="theme-color" content="#1b1b18">
+    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
+    <link rel="apple-touch-icon" href="{{ asset('icons/apple-touch-icon.png') }}">
+    {{-- iOS no lee el manifest para "modo standalone" — necesita estos
+         meta tags propios de Safari además del manifest de todos modos. --}}
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="{{ config('app.name') }}">
+
     @vite(['resources/css/app.css'])
 </head>
 <body class="flex flex-col min-h-screen bg-[#FDFDFC] dark:bg-[#0a0a0a] text-[#1b1b18] dark:text-[#EDEDEC]">
@@ -23,5 +41,13 @@
             @yield('content')
         </div>
     </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('{{ asset('sw.js') }}');
+            });
+        }
+    </script>
 </body>
 </html>
