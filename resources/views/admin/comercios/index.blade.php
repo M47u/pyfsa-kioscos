@@ -43,7 +43,7 @@
                         <td class="py-2 pr-4 font-mono text-xs">{{ $comercio->id }}</td>
                         <td class="py-2 pr-4">{{ $comercio->cantidad_usuarios }}</td>
                         <td class="py-2 pr-4">
-                            <select form="comercio-{{ $comercio->id }}" name="estado_suscripcion" class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-transparent px-2 py-1">
+                            <select form="comercio-{{ $comercio->id }}" name="estado_suscripcion" class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-2 py-1">
                                 @foreach ($estados as $estado)
                                     <option value="{{ $estado }}" @selected($comercio->estado_suscripcion === $estado)>
                                         {{ ucfirst($estado) }}
@@ -57,7 +57,7 @@
                                 form="comercio-{{ $comercio->id }}"
                                 name="trial_termina_el"
                                 value="{{ optional($comercio->trial_termina_el)->format('Y-m-d') }}"
-                                class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-transparent px-2 py-1"
+                                class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-2 py-1"
                             >
                         </td>
                         <td class="py-2">
