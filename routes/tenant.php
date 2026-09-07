@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\PanelController;
 use App\Http\Controllers\ProductoController;
+use App\Http\Controllers\ProductoImportController;
 use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\UsuarioController;
 use App\Http\Controllers\VentaController;
@@ -53,6 +54,16 @@ Route::middleware([
         Route::post('/zona-horaria', [ZonaHorariaController::class, 'update'])->name('zona-horaria.update');
 
         Route::get('/reportes', [ReporteController::class, 'index'])->name('reportes.index');
+
+        // Alta masiva de productos por CSV (gap encontrado por el usuario,
+        // no está en el documento de alcance original — ver
+        // ProductoImportController). Rutas estáticas antes del resource,
+        // por prolijidad: no colisionan igual porque 'show'/'destroy' están
+        // excluidos (no existe GET/DELETE productos/{producto} contra el
+        // que 'importar' pudiera matchear como si fuera un {producto}).
+        Route::get('productos/importar', [ProductoImportController::class, 'create'])->name('productos.importar');
+        Route::post('productos/importar', [ProductoImportController::class, 'store'])->name('productos.importar.store');
+        Route::get('productos/importar/plantilla', [ProductoImportController::class, 'plantilla'])->name('productos.importar.plantilla');
 
         Route::resource('productos', ProductoController::class)->except(['show', 'destroy']);
         Route::post('productos/{producto}/reponer', [ProductoController::class, 'reponerStock'])->name('productos.reponer');

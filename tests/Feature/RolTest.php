@@ -78,6 +78,7 @@ class RolTest extends TenantTestCase
         $empleado = $this->crearEmpleado();
 
         $this->actingAs($empleado)->get(route('productos.index'))->assertForbidden();
+        $this->actingAs($empleado)->get(route('productos.importar'))->assertForbidden();
         $this->actingAs($empleado)->get(route('reportes.index'))->assertForbidden();
         $this->actingAs($empleado)->get(route('zona-horaria.edit'))->assertForbidden();
         $this->actingAs($empleado)->get(route('usuarios.index'))->assertForbidden();

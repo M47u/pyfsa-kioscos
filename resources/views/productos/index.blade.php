@@ -5,12 +5,20 @@
 @section('content')
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-lg font-medium">Productos</h1>
-        <a
-            href="{{ route('productos.create') }}"
-            class="rounded-sm bg-[#1b1b18] dark:bg-[#eeeeec] text-white dark:text-[#1C1C1A] px-4 py-2 text-sm font-medium"
-        >
-            Nuevo producto
-        </a>
+        <div class="flex items-center gap-3">
+            <a
+                href="{{ route('productos.importar') }}"
+                class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] px-4 py-2 text-sm font-medium"
+            >
+                Importar CSV
+            </a>
+            <a
+                href="{{ route('productos.create') }}"
+                class="rounded-sm bg-[#1b1b18] dark:bg-[#eeeeec] text-white dark:text-[#1C1C1A] px-4 py-2 text-sm font-medium"
+            >
+                Nuevo producto
+            </a>
+        </div>
     </div>
 
     <x-status-banner />

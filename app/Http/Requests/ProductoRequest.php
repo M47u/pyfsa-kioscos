@@ -38,20 +38,29 @@ class ProductoRequest extends FormRequest
         }
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     public function rules(): array
     {
-        $producto = $this->route('producto');
+        return self::reglas($this->route('producto'));
+    }
 
+    /**
+     * Reglas de validación de un Producto, factorizadas como método estático
+     * para que ProductoImportController (alta masiva por CSV) las reuse
+     * fila por fila en vez de duplicarlas — ahí no hay un {producto} de
+     * ruta para ignorar en la unicidad de codigo_barras (siempre es alta
+     * nueva), de ahí el parámetro opcional en vez de leerlo de la request.
+     *
+     * @return array<string, mixed>
+     */
+    public static function reglas(mixed $productoAIgnorar = null): array
+    {
         return [
             'nombre' => ['required', 'string', 'max:255'],
             'codigo_barras' => [
                 'nullable',
                 'string',
                 'max:255',
-                Rule::unique('productos', 'codigo_barras')->ignore($producto),
+                Rule::unique('productos', 'codigo_barras')->ignore($productoAIgnorar),
             ],
             'precio_costo' => ['required', 'numeric', 'min:0'],
             'precio_venta' => ['required', 'numeric', 'min:0'],
