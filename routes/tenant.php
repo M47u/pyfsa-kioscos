@@ -8,6 +8,7 @@ use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\VentaController;
 use App\Http\Controllers\ZonaHorariaController;
+use App\Http\Middleware\EnsureComercioSuscripcionActiva;
 use App\Http\Middleware\EnsureComercioTimezoneIsConfigured;
 use App\Http\Middleware\InitializeTenancyByAuthenticatedUser;
 use Illuminate\Support\Facades\Route;
@@ -27,8 +28,13 @@ Route::middleware([
     'web',
     'auth',
     InitializeTenancyByAuthenticatedUser::class,
+    EnsureComercioSuscripcionActiva::class,
     EnsureComercioTimezoneIsConfigured::class,
 ])->group(function () {
+    Route::get('/suscripcion-vencida', function () {
+        return view('suscripcion-vencida');
+    })->name('suscripcion-vencida');
+
     Route::get('/zona-horaria', [ZonaHorariaController::class, 'edit'])->name('zona-horaria.edit');
     Route::post('/zona-horaria', [ZonaHorariaController::class, 'update'])->name('zona-horaria.update');
 
