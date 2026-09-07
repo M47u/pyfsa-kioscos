@@ -17,7 +17,10 @@ class PanelController extends Controller
     public function index(): View
     {
         return view('panel', [
-            'comercioId' => tenant('id'),
+            // Fallback al id crudo para comercios viejos (creados por
+            // tinker antes del flujo de registro) que nunca cargaron
+            // `nombre` — ver App\Http\Controllers\Auth\RegisteredUserController.
+            'comercioNombre' => tenant('nombre') ?? tenant('id'),
         ]);
     }
 }

@@ -4,7 +4,7 @@
 
 @section('content')
     <h1 class="text-lg font-medium mb-2">Bienvenido</h1>
-    <p class="text-sm opacity-70 mb-6">Comercio: {{ $comercioId }}</p>
+    <p class="text-sm opacity-70 mb-6">Comercio: {{ $comercioNombre }}</p>
 
     <x-status-banner />
 
