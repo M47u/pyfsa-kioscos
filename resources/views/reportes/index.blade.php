@@ -106,4 +106,87 @@
             <a href="{{ route('productos.index', ['bajo_minimo' => 1]) }}" class="underline text-sm">Ver productos</a>
         </div>
     </div>
+
+    <div class="grid grid-cols-1 gap-4 mb-4">
+        {{-- Tendencia por tramo del mes (1-10 / 11-20 / 21-fin de mes), NO
+             semana ISO — el corte sigue el ciclo de cobro de sueldo (fin de
+             mes / quincena), ver ReporteController::tendenciaPorTramoDelMes(). --}}
+        <div class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] p-4">
+            <h2 class="text-sm font-medium mb-1">Tendencia por tramo del mes</h2>
+            <p class="text-xs opacity-50 mb-3">Histórico completo. Mejora a medida que se acumulan más meses de datos — con poco volumen el ranking puede salir ruidoso.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                @foreach ($tendenciaPorTramo as $tramo)
+                    <div class="{{ !$loop->last ? 'md:border-r md:border-[#19140035] md:dark:border-[#3E3E3A] md:pr-4' : '' }}">
+                        <h3 class="text-sm font-medium mb-2">{{ $tramo['label'] }}</h3>
+
+                        <dl class="grid grid-cols-2 gap-y-1 text-sm mb-3">
+                            <dt class="opacity-70">Total vendido</dt>
+                            <dd class="font-medium text-right">{{ number_format($tramo['total'], 2) }}</dd>
+
+                            <dt class="opacity-70">% fiado</dt>
+                            <dd class="font-medium text-right">{{ number_format($tramo['pct_fiado'], 1) }}%</dd>
+                        </dl>
+
+                        @if ($tramo['productos']->isNotEmpty())
+                            <p class="text-xs opacity-70 mb-1">Top 5 productos (por cantidad)</p>
+                            <ol class="text-sm list-decimal list-inside space-y-0.5">
+                                @foreach ($tramo['productos'] as $fila)
+                                    <li>
+                                        {{ $fila['producto']?->nombre ?? 'Producto eliminado' }}
+                                        <span class="opacity-70">({{ $fila['cantidad'] }})</span>
+                                    </li>
+                                @endforeach
+                            </ol>
+                        @else
+                            <p class="text-sm opacity-70">Todavía no hay ventas en este tramo.</p>
+                        @endif
+                    </div>
+                @endforeach
+            </div>
+        </div>
+
+        {{-- Más vendido en fin de semana vs. resto de la semana. Histórico
+             completo — ver ReporteController::masVendidoFinDeSemana(). --}}
+        <div class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] p-4">
+            <h2 class="text-sm font-medium mb-1">Más vendido en fin de semana</h2>
+            <p class="text-xs opacity-50 mb-3">Histórico completo. Mejora a medida que se acumulan más meses de datos.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="md:border-r md:border-[#19140035] md:dark:border-[#3E3E3A] md:pr-4">
+                    <h3 class="text-sm font-medium mb-2">Fin de semana (sáb. y dom.)</h3>
+
+                    @if ($topFinDeSemana->isNotEmpty())
+                        <ol class="text-sm list-decimal list-inside space-y-0.5">
+                            @foreach ($topFinDeSemana as $fila)
+                                <li>
+                                    {{ $fila['producto']?->nombre ?? 'Producto eliminado' }}
+                                    <span class="opacity-70">({{ $fila['cantidad'] }})</span>
+                                </li>
+                            @endforeach
+                        </ol>
+                    @else
+                        <p class="text-sm opacity-70">Todavía no hay ventas de fin de semana.</p>
+                    @endif
+                </div>
+
+                <div>
+                    <h3 class="text-sm font-medium mb-2">Lunes a viernes</h3>
+
+                    @if ($topDiasDeSemana->isNotEmpty())
+                        <ol class="text-sm list-decimal list-inside space-y-0.5">
+                            @foreach ($topDiasDeSemana as $fila)
+                                <li>
+                                    {{ $fila['producto']?->nombre ?? 'Producto eliminado' }}
+                                    <span class="opacity-70">({{ $fila['cantidad'] }})</span>
+                                </li>
+                            @endforeach
+                        </ol>
+                    @else
+                        <p class="text-sm opacity-70">Todavía no hay ventas de lunes a viernes.</p>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection

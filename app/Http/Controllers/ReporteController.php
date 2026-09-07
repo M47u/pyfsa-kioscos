@@ -33,6 +33,19 @@ class ReporteController extends Controller
     ];
 
     /**
+     * Tramos del mes por rango de DÍA DEL MES (no semana ISO — ver
+     * tendenciaPorTramoDelMes()). El tramo 3 llega hasta 31 aunque el mes
+     * tenga menos días: DAY() nunca devuelve un valor que no haya existido
+     * realmente en ese mes, así que no hace falta ajustar el límite por
+     * mes (28/29/30/31).
+     */
+    private const TRAMOS = [
+        1 => ['desde' => 1, 'hasta' => 10, 'label' => 'Día 1 al 10'],
+        2 => ['desde' => 11, 'hasta' => 20, 'label' => 'Día 11 al 20'],
+        3 => ['desde' => 21, 'hasta' => 31, 'label' => 'Día 21 a fin de mes'],
+    ];
+
+    /**
      * Arma las 4 secciones del módulo de Reportes (módulo 3.4, priorización
      * del usuario — ver documento de alcance). A propósito quedan afuera el
      * reporte de "productos por valor de stock invertido" (deferred a una
@@ -53,6 +66,10 @@ class ReporteController extends Controller
 
         $productosBajoMinimo = $this->cantidadProductosBajoMinimo();
 
+        $tendenciaPorTramo = $this->tendenciaPorTramoDelMes();
+
+        [$topFinDeSemana, $topDiasDeSemana] = $this->masVendidoFinDeSemana();
+
         return view('reportes.index', [
             'ventasPorDia' => $ventasPorDia,
             'totalHoy' => $totalHoy,
@@ -63,6 +80,9 @@ class ReporteController extends Controller
             'totalPorCobrar' => $totalPorCobrar,
             'rankingDeudores' => $rankingDeudores,
             'productosBajoMinimo' => $productosBajoMinimo,
+            'tendenciaPorTramo' => $tendenciaPorTramo,
+            'topFinDeSemana' => $topFinDeSemana,
+            'topDiasDeSemana' => $topDiasDeSemana,
         ]);
     }
 
@@ -196,5 +216,134 @@ class ReporteController extends Controller
             ->get()
             ->filter(fn (Producto $producto) => ($producto->movimientos_sum_cantidad ?? 0) < $producto->stock_minimo)
             ->count();
+    }
+
+    /**
+     * Tendencia de ventas por tramo del mes (1-10, 11-20, 21-fin de mes),
+     * NO por semana ISO. Hipótesis validada con el usuario: el poder
+     * adquisitivo de los clientes varía dentro del mes según el ciclo de
+     * cobro de sueldo (fin de mes / quincena, patrón común en Argentina y
+     * Paraguay), y ese ciclo se repite por DÍA DEL MES — una semana
+     * calendario NO coincide con el ciclo de pago (el día 1 de un mes
+     * puede caer cualquier día de la semana).
+     *
+     * Histórico completo (TODAS las ventas de siempre, no solo el mes
+     * actual): el objetivo es ver el patrón acumulado a través de varios
+     * meses. Con pocas semanas de uso real el ranking por tramo puede
+     * salir ruidoso — no es un defecto del reporte, es una limitación
+     * estadística real de tener poco volumen; mejora sola a medida que se
+     * acumulan más meses de datos.
+     *
+     * Una sola query agrega total y total_fiado de los 3 tramos con un
+     * CASE WHEN en SQL (no 3 queries sueltas). El top 5 de productos por
+     * tramo SÍ necesita una query por tramo — "top N por grupo" no se
+     * puede resolver de forma portable en una sola query — cada una
+     * agregando en SQL con GROUP BY + ORDER BY + LIMIT vía
+     * topProductosPorCantidad() (mismo patrón que
+     * productoMasVendidoDeLaSemana()). Los productos ganadores de los 3
+     * tramos se traen en una sola query con whereIn, no uno por uno.
+     *
+     * @return Collection<int, array{desde: int, hasta: int, label: string, total: float, total_fiado: float, pct_fiado: float, productos: Collection<int, array{producto: ?Producto, cantidad: int}>}>
+     */
+    private function tendenciaPorTramoDelMes(): Collection
+    {
+        $totalesPorTramo = DB::table('ventas')
+            ->selectRaw('
+                CASE WHEN DAY(created_at) <= 10 THEN 1 WHEN DAY(created_at) <= 20 THEN 2 ELSE 3 END as tramo,
+                SUM(total) as total,
+                SUM(CASE WHEN medio_pago = ? THEN total ELSE 0 END) as total_fiado
+            ', [Venta::MEDIO_PAGO_FIADO])
+            ->groupByRaw('CASE WHEN DAY(created_at) <= 10 THEN 1 WHEN DAY(created_at) <= 20 THEN 2 ELSE 3 END')
+            ->get()
+            ->keyBy('tramo');
+
+        $topPorTramo = collect(self::TRAMOS)->map(
+            fn (array $rango) => $this->topProductosPorCantidad(
+                fn ($query) => $query->whereRaw('DAY(ventas.created_at) BETWEEN ? AND ?', [$rango['desde'], $rango['hasta']])
+            )
+        );
+
+        $idsProductos = $topPorTramo->flatten(1)->pluck('producto_id')->unique();
+        $productos = Producto::whereIn('id', $idsProductos)->get()->keyBy('id');
+
+        return collect(self::TRAMOS)->map(function (array $rango, int $tramo) use ($totalesPorTramo, $topPorTramo, $productos) {
+            $fila = $totalesPorTramo->get($tramo);
+            $total = (float) ($fila->total ?? 0);
+            $totalFiado = (float) ($fila->total_fiado ?? 0);
+
+            return [
+                'desde' => $rango['desde'],
+                'hasta' => $rango['hasta'],
+                'label' => $rango['label'],
+                'total' => $total,
+                'total_fiado' => $totalFiado,
+                'pct_fiado' => $total > 0 ? ($totalFiado / $total) * 100 : 0.0,
+                'productos' => $topPorTramo->get($tramo, collect())->map(fn ($fila) => [
+                    'producto' => $productos->get($fila->producto_id),
+                    'cantidad' => (int) $fila->cantidad_total,
+                ]),
+            ];
+        });
+    }
+
+    /**
+     * Top 5 (por defecto) productos por CANTIDAD vendida (no facturación),
+     * con un filtro adicional inyectado vía callback sobre el query
+     * builder (rango de día del mes, fin de semana vs. resto, etc.).
+     * Reutiliza el mismo patrón de join items_venta+ventas con
+     * GROUP BY + ORDER BY + LIMIT a nivel SQL que
+     * productoMasVendidoDeLaSemana() — nunca carga items_venta completo a
+     * PHP.
+     *
+     * @return Collection<int, object{producto_id: int, cantidad_total: int}>
+     */
+    private function topProductosPorCantidad(\Closure $filtro, int $limite = 5): Collection
+    {
+        $query = DB::table('items_venta')
+            ->join('ventas', 'ventas.id', '=', 'items_venta.venta_id')
+            ->selectRaw('items_venta.producto_id, SUM(items_venta.cantidad) as cantidad_total')
+            ->groupBy('items_venta.producto_id')
+            ->orderByDesc('cantidad_total')
+            ->limit($limite);
+
+        $filtro($query);
+
+        return $query->get();
+    }
+
+    /**
+     * Top 5 productos por cantidad, fin de semana (sábado + domingo) vs.
+     * resto de la semana (lunes a viernes). Histórico completo, mismo
+     * criterio de "mejora con más historial" que
+     * tendenciaPorTramoDelMes().
+     *
+     * Usa DAYOFWEEK() de MySQL, que numera 1=domingo ... 7=sábado — OJO
+     * que es una convención DISTINTA de Carbon::dayOfWeekIso (1=lunes ...
+     * 7=domingo), que es la que se usa en el resto de este controller (ver
+     * NOMBRES_DIA y ventasDeLaSemana()). No mezclar las dos.
+     *
+     * @return array{0: Collection<int, array{producto: ?Producto, cantidad: int}>, 1: Collection<int, array{producto: ?Producto, cantidad: int}>}
+     */
+    private function masVendidoFinDeSemana(): array
+    {
+        $topFinDeSemana = $this->topProductosPorCantidad(
+            fn ($query) => $query->whereRaw('DAYOFWEEK(ventas.created_at) IN (1, 7)')
+        );
+
+        $topDiasDeSemana = $this->topProductosPorCantidad(
+            fn ($query) => $query->whereRaw('DAYOFWEEK(ventas.created_at) NOT IN (1, 7)')
+        );
+
+        $idsProductos = $topFinDeSemana->pluck('producto_id')
+            ->merge($topDiasDeSemana->pluck('producto_id'))
+            ->unique();
+        $productos = Producto::whereIn('id', $idsProductos)->get()->keyBy('id');
+
+        $mapear = fn (Collection $filas) => $filas->map(fn ($fila) => [
+            'producto' => $productos->get($fila->producto_id),
+            'cantidad' => (int) $fila->cantidad_total,
+        ]);
+
+        return [$mapear($topFinDeSemana), $mapear($topDiasDeSemana)];
     }
 }

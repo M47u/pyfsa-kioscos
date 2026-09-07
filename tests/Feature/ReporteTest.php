@@ -172,4 +172,95 @@ class ReporteTest extends TenantTestCase
         $response->assertOk();
         $response->assertViewHas('productosBajoMinimo', 2);
     }
+
+    /**
+     * Tramo del mes por rango de DÍA DEL MES (no semana ISO). Tres ventas
+     * en tres días de mes distintos (5, 15, 25), cada una con un producto
+     * distinto, deben caer cada una en su tramo (1-10, 11-20, 21-fin de
+     * mes) con el producto correcto como top de ESE tramo. Es histórico
+     * (no depende del "hoy" congelado), así que las fechas no necesitan
+     * estar en la semana de referencia.
+     */
+    public function test_tendencia_por_tramo_del_mes_agrupa_por_dia_del_mes_y_calcula_top_de_cada_tramo(): void
+    {
+        $productoTramo1 = $this->crearProducto('Tramo 1', 100);
+        $ventaTramo1 = $this->crearVentaEnFecha('2026-06-05 10:00:00', 700);
+        $ventaTramo1->items()->create(['producto_id' => $productoTramo1->id, 'cantidad' => 7, 'precio_unitario' => 100]);
+
+        $productoTramo2 = $this->crearProducto('Tramo 2', 100);
+        $ventaTramo2 = $this->crearVentaEnFecha('2026-06-15 10:00:00', 800);
+        $ventaTramo2->items()->create(['producto_id' => $productoTramo2->id, 'cantidad' => 8, 'precio_unitario' => 100]);
+
+        $productoTramo3 = $this->crearProducto('Tramo 3', 100);
+        $ventaTramo3 = $this->crearVentaEnFecha('2026-06-25 10:00:00', 900);
+        $ventaTramo3->items()->create(['producto_id' => $productoTramo3->id, 'cantidad' => 9, 'precio_unitario' => 100]);
+
+        $response = $this->actingAs($this->user)->get(route('reportes.index'));
+
+        $response->assertOk();
+        $response->assertViewHas('tendenciaPorTramo', function ($tendencia) use ($productoTramo1, $productoTramo2, $productoTramo3) {
+            return $tendencia[1]['total'] === 700.0
+                && $tendencia[1]['productos']->first()['producto']->id === $productoTramo1->id
+                && $tendencia[1]['productos']->first()['cantidad'] === 7
+                && $tendencia[2]['total'] === 800.0
+                && $tendencia[2]['productos']->first()['producto']->id === $productoTramo2->id
+                && $tendencia[2]['productos']->first()['cantidad'] === 8
+                && $tendencia[3]['total'] === 900.0
+                && $tendencia[3]['productos']->first()['producto']->id === $productoTramo3->id
+                && $tendencia[3]['productos']->first()['cantidad'] === 9;
+        });
+    }
+
+    /**
+     * % fiado por tramo: se calcula por MONTO (no por cantidad de ventas).
+     * Una venta en efectivo de 3000 y una fiada de 1000 en el mismo tramo
+     * (día 1-10) dan un total de 4000 con 25% fiado.
+     */
+    public function test_porcentaje_fiado_por_tramo_se_calcula_por_monto(): void
+    {
+        $this->crearVentaEnFecha('2026-06-03 10:00:00', 3000, medioPago: Venta::MEDIO_PAGO_EFECTIVO);
+        $this->crearVentaEnFecha('2026-06-07 10:00:00', 1000, medioPago: Venta::MEDIO_PAGO_FIADO);
+
+        $response = $this->actingAs($this->user)->get(route('reportes.index'));
+
+        $response->assertOk();
+        $response->assertViewHas('tendenciaPorTramo', function ($tendencia) {
+            return $tendencia[1]['total'] === 4000.0
+                && $tendencia[1]['total_fiado'] === 1000.0
+                && $tendencia[1]['pct_fiado'] === 25.0;
+        });
+    }
+
+    /**
+     * Fin de semana (sábado + domingo, DAYOFWEEK() 1 y 7) vs. resto de la
+     * semana: el top 5 de cada lado se calcula sobre ventas separadas. Se
+     * reutiliza LUNES (2026-06-08) como día de semana; 2026-06-06 es
+     * sábado y 2026-06-07 es domingo de la misma semana.
+     */
+    public function test_mas_vendido_fin_de_semana_separa_sabado_y_domingo_del_resto_de_la_semana(): void
+    {
+        $productoFinde = $this->crearProducto('Producto finde', 100);
+
+        $ventaSabado = $this->crearVentaEnFecha('2026-06-06 10:00:00', 1000);
+        $ventaSabado->items()->create(['producto_id' => $productoFinde->id, 'cantidad' => 10, 'precio_unitario' => 100]);
+
+        $ventaDomingo = $this->crearVentaEnFecha('2026-06-07 10:00:00', 500);
+        $ventaDomingo->items()->create(['producto_id' => $productoFinde->id, 'cantidad' => 5, 'precio_unitario' => 100]);
+
+        $productoSemana = $this->crearProducto('Producto semana', 100);
+        $ventaLunes = $this->crearVentaEnFecha(self::LUNES, 2000);
+        $ventaLunes->items()->create(['producto_id' => $productoSemana->id, 'cantidad' => 20, 'precio_unitario' => 100]);
+
+        $response = $this->actingAs($this->user)->get(route('reportes.index'));
+
+        $response->assertOk();
+        $response->assertViewHas('topFinDeSemana', function ($top) use ($productoFinde) {
+            return $top->first()['producto']->id === $productoFinde->id
+                && $top->first()['cantidad'] === 15;
+        });
+        $response->assertViewHas('topDiasDeSemana', function ($top) use ($productoSemana) {
+            return $top->first()['producto']->id === $productoSemana->id
+                && $top->first()['cantidad'] === 20;
+        });
+    }
 }
