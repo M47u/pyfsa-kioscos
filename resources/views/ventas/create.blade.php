@@ -206,18 +206,41 @@
             productoSearch.addEventListener('input', () => buscarProductos(productoSearch.value.trim()));
 
             // El lector de código de barras "tipea" el código y manda un
-            // Enter solo: si en ese momento hay exactamente una coincidencia
-            // (lo esperable con un código de barras exacto), se agrega
-            // directo al carrito sin que el cajero toque nada más.
-            productoSearch.addEventListener('keydown', (event) => {
+            // Enter solo, casi sin pausa. NO reusamos resultadosActuales acá:
+            // ese estado lo llena el buscador debounced (200ms) del evento
+            // 'input', que a esa velocidad puede no haber resuelto todavía
+            // (o haber resuelto para un código a medio escribir) — mostraría
+            // el dropdown de sugerencias en vez de resolver directo. Enter
+            // dispara su propia búsqueda inmediata y agrega el producto cuyo
+            // código de barras coincide EXACTO con lo tipeado; si no hay
+            // coincidencia exacta de código pero la búsqueda deja un único
+            // resultado (alguien tipeando un nombre a mano), se agrega ese.
+            // Nunca deja el dropdown de sugerencias como resultado del Enter.
+            productoSearch.addEventListener('keydown', async (event) => {
                 if (event.key !== 'Enter') {
                     return;
                 }
 
                 event.preventDefault(); // no confundir con el submit del form de la venta
 
-                if (resultadosActuales.length === 1) {
-                    agregarProducto(resultadosActuales[0]);
+                const term = productoSearch.value.trim();
+                if (term === '') {
+                    return;
+                }
+
+                const respuesta = await fetch(`{{ route('productos.index') }}?buscar=${encodeURIComponent(term)}`, {
+                    headers: { Accept: 'application/json' },
+                });
+                const productos = await respuesta.json();
+                const match = productos.find((producto) => producto.codigo_barras === term) ??
+                    (productos.length === 1 ? productos[0] : null);
+
+                ocultarResultados();
+
+                if (match) {
+                    agregarProducto(match);
+                } else {
+                    productoSinResultados.hidden = false;
                 }
             });
 
