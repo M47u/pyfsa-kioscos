@@ -99,8 +99,13 @@ class ReporteController extends Controller
      */
     private function ventasDeLaSemana(Carbon $inicioSemana, Carbon $finSemana): array
     {
+        // whereNull('anulada_en'): una venta anulada (ver Venta::anulada_en
+        // / VentaController::anular) no cuenta como venta real en ningún
+        // reporte — ver el mismo filtro repetido en el resto de este
+        // controller.
         $ventas = Venta::query()
             ->whereBetween('created_at', [$inicioSemana, $finSemana])
+            ->whereNull('anulada_en')
             ->get(['total', 'created_at']);
 
         $totalesPorFecha = $ventas
@@ -147,6 +152,7 @@ class ReporteController extends Controller
         $fila = DB::table('items_venta')
             ->join('ventas', 'ventas.id', '=', 'items_venta.venta_id')
             ->whereBetween('ventas.created_at', [$inicioSemana, $finSemana])
+            ->whereNull('ventas.anulada_en')
             ->selectRaw('items_venta.producto_id, SUM(items_venta.cantidad) as cantidad_total')
             ->groupBy('items_venta.producto_id')
             ->orderByDesc('cantidad_total')
@@ -166,8 +172,10 @@ class ReporteController extends Controller
      */
     private function totalPorCobrar(): float
     {
-        $totalFiado = (float) Venta::where('medio_pago', Venta::MEDIO_PAGO_FIADO)->sum('total');
-        $totalPagado = (float) Pago::sum('monto');
+        $totalFiado = (float) Venta::where('medio_pago', Venta::MEDIO_PAGO_FIADO)
+            ->whereNull('anulada_en')
+            ->sum('total');
+        $totalPagado = (float) Pago::whereNull('anulado_en')->sum('monto');
 
         return $totalFiado - $totalPagado;
     }
@@ -185,8 +193,8 @@ class ReporteController extends Controller
     private function rankingDeudores(): Collection
     {
         return Cliente::query()
-            ->withSum(['ventas as total_fiado' => fn ($query) => $query->where('medio_pago', Venta::MEDIO_PAGO_FIADO)], 'total')
-            ->withSum('pagos as total_pagos', 'monto')
+            ->withSum(['ventas as total_fiado' => fn ($query) => $query->where('medio_pago', Venta::MEDIO_PAGO_FIADO)->whereNull('anulada_en')], 'total')
+            ->withSum(['pagos as total_pagos' => fn ($query) => $query->whereNull('anulado_en')], 'monto')
             ->get()
             ->map(function (Cliente $cliente) {
                 $saldo = (float) ($cliente->total_fiado ?? 0) - (float) ($cliente->total_pagos ?? 0);
@@ -248,6 +256,7 @@ class ReporteController extends Controller
     private function tendenciaPorTramoDelMes(): Collection
     {
         $totalesPorTramo = DB::table('ventas')
+            ->whereNull('anulada_en')
             ->selectRaw('
                 CASE WHEN DAY(created_at) <= 10 THEN 1 WHEN DAY(created_at) <= 20 THEN 2 ELSE 3 END as tramo,
                 SUM(total) as total,
@@ -295,12 +304,17 @@ class ReporteController extends Controller
      * productoMasVendidoDeLaSemana() — nunca carga items_venta completo a
      * PHP.
      *
+     * whereNull('ventas.anulada_en') acá en la base compartida: cubre a
+     * los dos call sites (tendenciaPorTramoDelMes() y
+     * masVendidoFinDeSemana()) sin repetirlo en cada uno.
+     *
      * @return Collection<int, object{producto_id: int, cantidad_total: int}>
      */
     private function topProductosPorCantidad(\Closure $filtro, int $limite = 5): Collection
     {
         $query = DB::table('items_venta')
             ->join('ventas', 'ventas.id', '=', 'items_venta.venta_id')
+            ->whereNull('ventas.anulada_en')
             ->selectRaw('items_venta.producto_id, SUM(items_venta.cantidad) as cantidad_total')
             ->groupBy('items_venta.producto_id')
             ->orderByDesc('cantidad_total')

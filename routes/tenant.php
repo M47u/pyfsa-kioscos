@@ -58,5 +58,14 @@ Route::middleware([
         Route::post('productos/{producto}/reponer', [ProductoController::class, 'reponerStock'])->name('productos.reponer');
 
         Route::resource('usuarios', UsuarioController::class)->only(['index', 'create', 'store']);
+
+        // Anular venta/pago (documento de alcance — corrección de error
+        // humano): dueño-only aunque ventas/clientes en sí son compartidas
+        // con empleado (ver el resto de rutas fuera de este sub-grupo),
+        // por eso viven acá adentro y no junto al resto de rutas de
+        // ventas/clientes. Ver VentaController::anular y
+        // ClienteController::anularPago.
+        Route::post('ventas/{venta}/anular', [VentaController::class, 'anular'])->name('ventas.anular');
+        Route::post('clientes/pagos/{pago}/anular', [ClienteController::class, 'anularPago'])->name('clientes.pagos.anular');
     });
 });

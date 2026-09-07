@@ -38,14 +38,22 @@ class Cliente extends Model
      * cliente MENOS la suma de sus pagos. Un resultado negativo (pagó más
      * de lo que debía) es información válida y no se clampea a 0: no hay
      * ninguna regla de negocio que lo impida.
+     *
+     * whereNull('anulada_en')/whereNull('anulado_en'): una venta o un pago
+     * anulado (ver Venta::anulada_en / Pago::anulado_en) no debe seguir
+     * afectando el saldo — sigue existiendo en la base para auditoría, pero
+     * es como si nunca hubiera pasado a efectos de este cálculo.
      */
     public function saldo(): float
     {
         $totalFiado = (float) $this->ventas()
             ->where('medio_pago', Venta::MEDIO_PAGO_FIADO)
+            ->whereNull('anulada_en')
             ->sum('total');
 
-        $totalPagado = (float) $this->pagos()->sum('monto');
+        $totalPagado = (float) $this->pagos()
+            ->whereNull('anulado_en')
+            ->sum('monto');
 
         return $totalFiado - $totalPagado;
     }

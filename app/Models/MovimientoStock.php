@@ -20,6 +20,12 @@ class MovimientoStock extends Model
     // Usado por VentaController::store con cantidad negativa.
     public const TIPO_VENTA = 'venta';
 
+    // Usado por VentaController::anular con cantidad POSITIVA (reversa
+    // exacta de TIPO_VENTA): repone el stock de una venta anulada sin
+    // borrar ni editar el movimiento original, mismo principio que el
+    // resto del sistema.
+    public const TIPO_ANULACION_VENTA = 'anulacion_venta';
+
     protected $table = 'movimientos_stock';
 
     protected $fillable = [
