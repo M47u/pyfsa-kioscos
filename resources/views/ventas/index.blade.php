@@ -88,6 +88,20 @@
                                     Anulada
                                 </span>
                             @endif
+                            {{-- Offline (ver CLAUDE.md, arquitectura offline):
+                                 venta sincronizada desde la cola offline que
+                                 dejó stock negativo — dueño y empleado la ven
+                                 los dos por igual, es información, no una
+                                 acción restringida (ver
+                                 VentaController::store). --}}
+                            @if ($venta->sincronizada_con_stock_insuficiente)
+                                <span
+                                    class="rounded-sm bg-[#fffbea] dark:bg-[#2a2200] border border-[#F5A623] text-[#8a6100] dark:text-[#F5C453] px-2 py-0.5 text-xs font-medium"
+                                    title="Esta venta se sincronizó desde la cola offline dejando stock negativo. Revisar el stock del producto."
+                                >
+                                    ⚠ sincronizada con stock insuficiente
+                                </span>
+                            @endif
                         </td>
                         @if ($esDueno)
                             <td class="py-2">

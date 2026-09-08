@@ -66,6 +66,8 @@ class ReporteController extends Controller
 
         $productosBajoMinimo = $this->cantidadProductosBajoMinimo();
 
+        $ventasOfflineConStockInsuficiente = $this->cantidadVentasOfflineConStockInsuficiente();
+
         $tendenciaPorTramo = $this->tendenciaPorTramoDelMes();
 
         [$topFinDeSemana, $topDiasDeSemana] = $this->masVendidoFinDeSemana();
@@ -80,6 +82,7 @@ class ReporteController extends Controller
             'totalPorCobrar' => $totalPorCobrar,
             'rankingDeudores' => $rankingDeudores,
             'productosBajoMinimo' => $productosBajoMinimo,
+            'ventasOfflineConStockInsuficiente' => $ventasOfflineConStockInsuficiente,
             'tendenciaPorTramo' => $tendenciaPorTramo,
             'topFinDeSemana' => $topFinDeSemana,
             'topDiasDeSemana' => $topDiasDeSemana,
@@ -223,6 +226,24 @@ class ReporteController extends Controller
         return Producto::withSum('movimientos', 'cantidad')
             ->get()
             ->filter(fn (Producto $producto) => ($producto->movimientos_sum_cantidad ?? 0) < $producto->stock_minimo)
+            ->count();
+    }
+
+    /**
+     * Offline (documento de alcance — ver CLAUDE.md, arquitectura offline):
+     * conteo de ventas que llegaron por la cola offline dejando stock
+     * negativo (ver Venta::sincronizada_con_stock_insuficiente y
+     * VentaController::store) — pendientes de revisar por el dueño. Mismo
+     * criterio que cantidadProductosBajoMinimo(): solo el número, el link
+     * "Ver ventas" en la vista lleva al listado completo filtrado
+     * (ventas.index?stock_insuficiente=1) en vez de duplicar la tabla acá.
+     * whereNull('anulada_en') porque una venta ya anulada no es algo
+     * "pendiente de revisar" — su stock ya fue revertido.
+     */
+    private function cantidadVentasOfflineConStockInsuficiente(): int
+    {
+        return Venta::where('sincronizada_con_stock_insuficiente', true)
+            ->whereNull('anulada_en')
             ->count();
     }
 

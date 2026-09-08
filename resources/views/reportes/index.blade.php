@@ -105,6 +105,25 @@
 
             <a href="{{ route('productos.index', ['bajo_minimo' => 1]) }}" class="underline text-sm">Ver productos</a>
         </div>
+
+        {{-- Offline (documento de alcance — ver CLAUDE.md, arquitectura
+             offline): ventas que llegaron por la cola offline dejando stock
+             negativo (ver Venta::sincronizada_con_stock_insuficiente),
+             pendientes de que el dueño las revise. Mismo criterio que "Stock
+             bajo mínimo": solo el número acá, la tabla completa vive en
+             ventas/index.blade.php. --}}
+        <div class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] p-4">
+            <h2 class="text-sm font-medium mb-3">Ventas offline con stock insuficiente</h2>
+
+            <p class="text-2xl font-medium {{ $ventasOfflineConStockInsuficiente > 0 ? 'text-[#F53003] dark:text-[#FF4433]' : '' }}">
+                {{ $ventasOfflineConStockInsuficiente }}
+            </p>
+            <p class="text-sm opacity-70 mb-3">
+                {{ $ventasOfflineConStockInsuficiente === 1 ? 'venta sincronizada dejando stock negativo, pendiente de revisar' : 'ventas sincronizadas dejando stock negativo, pendientes de revisar' }}
+            </p>
+
+            <a href="{{ route('ventas.index', ['stock_insuficiente' => 1]) }}" class="underline text-sm">Ver ventas</a>
+        </div>
     </div>
 
     <div class="grid grid-cols-1 gap-4 mb-4">
