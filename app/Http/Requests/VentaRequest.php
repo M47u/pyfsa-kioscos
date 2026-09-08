@@ -48,6 +48,13 @@ class VentaRequest extends FormRequest
             'items' => ['required', 'array', 'min:1'],
             'items.*.producto_id' => ['required', 'integer', Rule::exists('productos', 'id')],
             'items.*.cantidad' => ['required', 'integer', 'min:1'],
+            // Offline (ver CLAUDE.md, arquitectura offline): lo genera
+            // SIEMPRE el frontend (crypto.randomUUID()), tanto si la venta
+            // se manda online al toque como si se encola en IndexedDB. Sin
+            // 'unique' acá a propósito: un uuid repetido NO es un error de
+            // validación, es un sync repetido — VentaController::store lo
+            // trata como éxito idempotente en vez de rechazarlo (ver ahí).
+            'uuid_dispositivo' => ['nullable', 'string', 'uuid'],
         ];
     }
 
@@ -72,10 +79,22 @@ class VentaRequest extends FormRequest
      * antes de que ninguno confirme. La garantía real contra condiciones de
      * carrera vive en VentaController::store, que vuelve a calcular el
      * stock con lockForUpdate() DENTRO de la transacción.
+     *
+     * Offline (ver CLAUDE.md, arquitectura offline): si la request trae
+     * uuid_dispositivo (viene de la cola offline), este chequeo entero se
+     * salta — decisión de negocio confirmada: una venta offline no pudo
+     * validar el stock contra el servidor en el momento real de la venta
+     * (el cliente ya se fue con el producto en mano), así que nunca se
+     * rechaza acá. VentaController::store es quien decide, con el mismo
+     * criterio, si además hay que marcarla sincronizada_con_stock_insuficiente.
      */
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
+            if ($this->filled('uuid_dispositivo')) {
+                return;
+            }
+
             $items = $this->input('items');
 
             if (! is_array($items)) {

@@ -21,6 +21,13 @@ class Venta extends Model
         'user_id',
         'medio_pago',
         'total',
+        // Offline (ver VentaController::store y CLAUDE.md, arquitectura
+        // offline): uuid_dispositivo viene del frontend (crypto.randomUUID())
+        // en toda venta, online u offline. sincronizada_con_stock_insuficiente
+        // la setea el controller cuando una venta encolada offline se
+        // sincroniza dejando stock negativo.
+        'uuid_dispositivo',
+        'sincronizada_con_stock_insuficiente',
         // Los tres de abajo nunca vienen de un form del usuario: los
         // setea VentaController::anular() a mano, con datos ya validados
         // (auth()->id(), now()). Están en $fillable para poder usar
@@ -34,6 +41,7 @@ class Venta extends Model
     {
         return [
             'total' => 'decimal:2',
+            'sincronizada_con_stock_insuficiente' => 'boolean',
             'anulada_en' => 'datetime',
         ];
     }

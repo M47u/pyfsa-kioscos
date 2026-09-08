@@ -17,6 +17,11 @@ class Pago extends Model
         'cliente_id',
         'monto',
         'user_id',
+        // Offline (ver ClienteController::registrarPago y CLAUDE.md,
+        // arquitectura offline): viene del frontend (crypto.randomUUID())
+        // en todo pago, online u offline — mismo criterio que
+        // Venta::uuid_dispositivo.
+        'uuid_dispositivo',
         // Los tres de abajo nunca vienen de un form del usuario: los
         // setea ClienteController::anularPago() a mano (ver Venta::$fillable
         // por el mismo motivo).

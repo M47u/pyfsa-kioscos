@@ -10,6 +10,7 @@ use App\Http\Requests\PagoRequest;
 use App\Models\Cliente;
 use App\Models\Pago;
 use App\Models\Venta;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -83,12 +84,38 @@ class ClienteController extends Controller
         ]);
     }
 
+    /**
+     * Offline (documento de alcance — "Cobrar fiado" funciona offline, ver
+     * CLAUDE.md, arquitectura offline): mismo criterio de idempotencia que
+     * VentaController::store — si uuid_dispositivo ya existe en un Pago, es
+     * un reintento de sync (red flaky, doble intento), no un pago nuevo, y
+     * se responde como éxito sin crear nada. El chequeo de abajo cubre el
+     * reintento secuencial normal; el catch de QueryException cubre la
+     * carrera real de dos intentos casi simultáneos contra la constraint
+     * UNIQUE de la columna. Un pago no tiene equivalente a "stock
+     * insuficiente" — no hay ninguna otra relajación de validación acá.
+     */
     public function registrarPago(PagoRequest $request, Cliente $cliente): RedirectResponse
     {
-        $cliente->pagos()->create([
-            ...$request->validated(),
-            'user_id' => auth()->id(),
-        ]);
+        $data = $request->validated();
+        $uuidDispositivo = $data['uuid_dispositivo'] ?? null;
+
+        if ($uuidDispositivo !== null && Pago::where('uuid_dispositivo', $uuidDispositivo)->exists()) {
+            return redirect()->route('clientes.show', $cliente)->with('status', 'Pago registrado correctamente.');
+        }
+
+        try {
+            $cliente->pagos()->create([
+                ...$data,
+                'user_id' => auth()->id(),
+            ]);
+        } catch (QueryException $e) {
+            if ($uuidDispositivo !== null && str_contains($e->getMessage(), 'uuid_dispositivo')) {
+                return redirect()->route('clientes.show', $cliente)->with('status', 'Pago registrado correctamente.');
+            }
+
+            throw $e;
+        }
 
         return redirect()->route('clientes.show', $cliente)->with('status', 'Pago registrado correctamente.');
     }

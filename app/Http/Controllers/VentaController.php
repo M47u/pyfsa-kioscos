@@ -11,6 +11,7 @@ use App\Models\ItemVenta;
 use App\Models\MovimientoStock;
 use App\Models\Producto;
 use App\Models\Venta;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -18,9 +19,21 @@ use Illuminate\View\View;
 
 class VentaController extends Controller
 {
+    /**
+     * ?stock_insuficiente=1: usado por el link "Ver ventas" del resumen de
+     * ventas offline con stock insuficiente pendientes de revisar en
+     * Reportes (ver ReporteController) — mismo criterio que
+     * ?bajo_minimo=1 en ProductoController::index().
+     */
     public function index(): View
     {
-        $ventas = Venta::query()->with('cliente')->latest()->get();
+        $stockInsuficiente = request()->boolean('stock_insuficiente');
+
+        $ventas = Venta::query()
+            ->with('cliente')
+            ->when($stockInsuficiente, fn ($query) => $query->where('sincronizada_con_stock_insuficiente', true))
+            ->latest()
+            ->get();
 
         return view('ventas.index', [
             'ventas' => $ventas,
@@ -58,76 +71,45 @@ class VentaController extends Controller
      * concurrentes, y el stock se recalcula después de tomar el lock, ya
      * con los datos confirmados por cualquier venta que haya llegado
      * primero.
+     *
+     * Offline (documento de alcance — ver CLAUDE.md, arquitectura offline):
+     * uuid_dispositivo llega tanto de una venta mandada online al toque como
+     * de una que se encoló en IndexedDB y recién ahora sincroniza. Dos
+     * ajustes respecto del camino normal, los dos gateados por la PRESENCIA
+     * de uuid_dispositivo (una venta online normal, sin uuid, no cambia en
+     * nada):
+     *
+     * 1. Idempotencia: si ya existe una Venta con este uuid_dispositivo, es
+     *    un reintento de sync (red flaky, doble intento), no una venta
+     *    nueva — se responde como éxito sin crear nada. El chequeo de abajo
+     *    (antes de la transacción) cubre el caso normal (reintento
+     *    secuencial); el catch de QueryException al final cubre la carrera
+     *    real de dos intentos casi simultáneos chocando contra la
+     *    constraint UNIQUE de la columna, que es la garantía dura.
+     * 2. Stock: una venta offline no pudo validar el stock contra el
+     *    servidor en el momento real (el cliente ya se fue con el producto
+     *    en mano) — se crea igual aunque deje stock negativo, marcada
+     *    sincronizada_con_stock_insuficiente para que el dueño la revise
+     *    (ver ventas/index.blade.php y reportes/index.blade.php).
      */
     public function store(VentaRequest $request): RedirectResponse
     {
         $data = $request->validated();
+        $uuidDispositivo = $data['uuid_dispositivo'] ?? null;
 
-        DB::transaction(function () use ($data) {
-            $productoIds = collect($data['items'])->pluck('producto_id')->unique();
+        if ($uuidDispositivo !== null && Venta::where('uuid_dispositivo', $uuidDispositivo)->exists()) {
+            return redirect()->route('ventas.index')->with('status', 'Venta registrada correctamente.');
+        }
 
-            // lockForUpdate() bloquea las filas de estos productos a nivel
-            // de base de datos: si otra venta concurrente del mismo
-            // producto ya está adentro de su propia transacción, esta
-            // query espera a que esa termine (commit o rollback) antes de
-            // poder leer, en vez de leer un stock desactualizado.
-            $productos = Producto::query()
-                ->whereIn('id', $productoIds)
-                ->lockForUpdate()
-                ->get()
-                ->keyBy('id');
-
-            // Mismo criterio que VentaRequest::withValidator: sumar por
-            // producto (puede repetirse en más de una fila del carrito) y
-            // comparar el total pedido contra el stock ya recalculado bajo
-            // el lock.
-            $cantidadesPorProducto = collect($data['items'])
-                ->groupBy('producto_id')
-                ->map(fn ($filas) => (int) $filas->sum('cantidad'));
-
-            foreach ($cantidadesPorProducto as $productoId => $cantidadPedida) {
-                $producto = $productos[$productoId];
-                $stockActual = $producto->stockActual();
-
-                if ($cantidadPedida > $stockActual) {
-                    // ValidationException, no una excepción custom: así
-                    // Laravel la maneja igual que cualquier otro fallo de
-                    // validación de la app (redirect back con el error en
-                    // la misma clave 'items' que ya usa el pre-check),
-                    // sin necesidad de un catch manual acá.
-                    throw ValidationException::withMessages([
-                        'items' => "No hay stock suficiente de {$producto->nombre}: quedan {$stockActual}, se pidieron {$cantidadPedida}.",
-                    ]);
-                }
+        try {
+            $this->crearVenta($data, $uuidDispositivo);
+        } catch (QueryException $e) {
+            if ($uuidDispositivo !== null && str_contains($e->getMessage(), 'uuid_dispositivo')) {
+                return redirect()->route('ventas.index')->with('status', 'Venta registrada correctamente.');
             }
 
-            $total = collect($data['items'])->sum(
-                fn (array $item) => $productos[$item['producto_id']]->precio_venta * $item['cantidad']
-            );
-
-            $venta = Venta::create([
-                'cliente_id' => $data['cliente_id'] ?? null,
-                'user_id' => auth()->id(),
-                'medio_pago' => $data['medio_pago'],
-                'total' => $total,
-            ]);
-
-            foreach ($data['items'] as $item) {
-                $producto = $productos[$item['producto_id']];
-
-                $venta->items()->create([
-                    'producto_id' => $producto->id,
-                    'cantidad' => $item['cantidad'],
-                    'precio_unitario' => $producto->precio_venta,
-                ]);
-
-                $producto->movimientos()->create([
-                    'tipo' => MovimientoStock::TIPO_VENTA,
-                    'cantidad' => -$item['cantidad'],
-                    'user_id' => auth()->id(),
-                ]);
-            }
-        });
+            throw $e;
+        }
 
         // A diferencia del stock (que bloquea), el límite de crédito de un
         // cliente fiado solo advierte: el kiosquero puede decidir fiarle de
@@ -150,6 +132,91 @@ class VentaController extends Controller
         }
 
         return redirect()->route('ventas.index')->with('status', 'Venta registrada correctamente.');
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function crearVenta(array $data, ?string $uuidDispositivo): void
+    {
+        DB::transaction(function () use ($data, $uuidDispositivo) {
+            $productoIds = collect($data['items'])->pluck('producto_id')->unique();
+
+            // lockForUpdate() bloquea las filas de estos productos a nivel
+            // de base de datos: si otra venta concurrente del mismo
+            // producto ya está adentro de su propia transacción, esta
+            // query espera a que esa termine (commit o rollback) antes de
+            // poder leer, en vez de leer un stock desactualizado.
+            $productos = Producto::query()
+                ->whereIn('id', $productoIds)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            // Mismo criterio que VentaRequest::withValidator: sumar por
+            // producto (puede repetirse en más de una fila del carrito) y
+            // comparar el total pedido contra el stock ya recalculado bajo
+            // el lock.
+            $cantidadesPorProducto = collect($data['items'])
+                ->groupBy('producto_id')
+                ->map(fn ($filas) => (int) $filas->sum('cantidad'));
+
+            // sincronizada_con_stock_insuficiente: true si ALGÚN producto del
+            // carrito quedó negativo. Con uuid_dispositivo presente (venta
+            // offline) esto NUNCA bloquea (ver el comentario grande arriba de
+            // store()); sin uuid_dispositivo (venta online normal) el
+            // comportamiento de bloqueo no cambia en nada.
+            $stockInsuficiente = false;
+
+            foreach ($cantidadesPorProducto as $productoId => $cantidadPedida) {
+                $producto = $productos[$productoId];
+                $stockActual = $producto->stockActual();
+
+                if ($cantidadPedida > $stockActual) {
+                    if ($uuidDispositivo === null) {
+                        // ValidationException, no una excepción custom: así
+                        // Laravel la maneja igual que cualquier otro fallo de
+                        // validación de la app (redirect back con el error en
+                        // la misma clave 'items' que ya usa el pre-check),
+                        // sin necesidad de un catch manual acá.
+                        throw ValidationException::withMessages([
+                            'items' => "No hay stock suficiente de {$producto->nombre}: quedan {$stockActual}, se pidieron {$cantidadPedida}.",
+                        ]);
+                    }
+
+                    $stockInsuficiente = true;
+                }
+            }
+
+            $total = collect($data['items'])->sum(
+                fn (array $item) => $productos[$item['producto_id']]->precio_venta * $item['cantidad']
+            );
+
+            $venta = Venta::create([
+                'cliente_id' => $data['cliente_id'] ?? null,
+                'user_id' => auth()->id(),
+                'medio_pago' => $data['medio_pago'],
+                'total' => $total,
+                'uuid_dispositivo' => $uuidDispositivo,
+                'sincronizada_con_stock_insuficiente' => $stockInsuficiente,
+            ]);
+
+            foreach ($data['items'] as $item) {
+                $producto = $productos[$item['producto_id']];
+
+                $venta->items()->create([
+                    'producto_id' => $producto->id,
+                    'cantidad' => $item['cantidad'],
+                    'precio_unitario' => $producto->precio_venta,
+                ]);
+
+                $producto->movimientos()->create([
+                    'tipo' => MovimientoStock::TIPO_VENTA,
+                    'cantidad' => -$item['cantidad'],
+                    'user_id' => auth()->id(),
+                ]);
+            }
+        });
     }
 
     /**
