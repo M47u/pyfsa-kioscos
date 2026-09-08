@@ -27,12 +27,23 @@
 
 <nav class="border-b border-[#19140035] dark:border-[#3E3E3A]">
     <div class="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between text-sm">
-        <a
-            href="{{ route('panel') }}"
-            class="font-medium {{ request()->routeIs('panel') ? 'underline' : '' }}"
-        >
-            Panel
-        </a>
+        <div class="flex items-center gap-3">
+            <a
+                href="{{ route('panel') }}"
+                class="font-medium {{ request()->routeIs('panel') ? 'underline' : '' }}"
+            >
+                Panel
+            </a>
+
+            {{-- Offline (ver CLAUDE.md, arquitectura offline y
+                 resources/js/offline.js): "Sin conexión" cuando el
+                 navegador no tiene señal, y/o la cantidad de ventas/pagos
+                 todavía sin sincronizar de la cola de IndexedDB. Arranca
+                 hidden y el script de abajo decide si mostrarlo — sin JS
+                 (navegador viejo, script bloqueado) simplemente no aparece,
+                 no rompe nada del resto del nav. --}}
+            <span id="offline-status-badge" hidden class="rounded-sm bg-[#fffbea] dark:bg-[#2a2200] border border-[#F5A623] text-[#8a6100] dark:text-[#F5C453] px-2 py-0.5 text-xs font-medium"></span>
+        </div>
 
         {{-- Fila horizontal, solo desde sm: (640px) para arriba. --}}
         <div class="hidden sm:flex items-center gap-6">
@@ -80,3 +91,49 @@
         </details>
     </div>
 </nav>
+
+<script>
+    (function () {
+        const badge = document.getElementById('offline-status-badge');
+        if (!badge) {
+            return;
+        }
+
+        function pintar(cantidadPendientes) {
+            if (!navigator.onLine) {
+                badge.hidden = false;
+                badge.textContent = cantidadPendientes > 0
+                    ? `Sin conexión — ${cantidadPendientes} pendiente(s)`
+                    : 'Sin conexión';
+                return;
+            }
+
+            if (cantidadPendientes > 0) {
+                badge.hidden = false;
+                badge.textContent = `${cantidadPendientes} pendiente(s) de sincronizar`;
+                return;
+            }
+
+            badge.hidden = true;
+        }
+
+        // window.offlineSync lo define resources/js/offline.js (importado
+        // desde app.js, un <script type="module"> que Vite difiere hasta
+        // después de parsear todo el HTML) — recién puede no existir
+        // todavía en este punto, por eso se espera a 'load', que corre
+        // después de que los módulos ya terminaron de ejecutar.
+        function actualizar() {
+            if (!window.offlineSync) {
+                pintar(0);
+                return;
+            }
+
+            window.offlineSync.contarPendientes().then(pintar).catch(() => pintar(0));
+        }
+
+        window.addEventListener('load', actualizar);
+        window.addEventListener('online', actualizar);
+        window.addEventListener('offline', actualizar);
+        window.addEventListener('offlinequeuechange', (event) => pintar(event.detail.cantidad));
+    })();
+</script>
