@@ -10,6 +10,13 @@
 
     <x-validation-errors />
 
+    {{-- Offline (ver CLAUDE.md, arquitectura offline y resources/js/offline.js):
+         mensaje de resultado del submit por fetch — éxito, guardada
+         localmente (sin conexión) o error de validación. Arranca hidden, lo
+         maneja el <script> de abajo; @csrf/@validation-errors de arriba
+         siguen siendo el fallback si el navegador no corre JS. --}}
+    <div id="venta-feedback" hidden class="mb-4 rounded-sm border px-4 py-3 text-sm"></div>
+
     <form method="POST" action="{{ route('ventas.store') }}" id="venta-form" class="space-y-6">
         @csrf
 
@@ -118,6 +125,8 @@
 
     <script>
         (function () {
+            const ventaForm = document.getElementById('venta-form');
+            const ventaFeedback = document.getElementById('venta-feedback');
             const medioPagoSelect = document.getElementById('medio_pago');
             const clienteWrapper = document.getElementById('cliente-wrapper');
             const productoSearch = document.getElementById('producto-search');
@@ -297,6 +306,81 @@
             }
 
             render();
+
+            // Offline (ver CLAUDE.md, arquitectura offline y
+            // resources/js/offline.js): antes de esto el submit era un POST
+            // nativo del browser (el form ya tenía todos los hidden inputs
+            // que necesita, ver render() arriba) — ahora se intercepta para
+            // poder intentar un fetch primero y, si falla por falta de
+            // conexión, encolar la venta en IndexedDB en vez de perderla.
+            const CLASES_FEEDBACK = {
+                exito: 'bg-[#f0fff2] dark:bg-[#00220a] border-[#03F53B] text-[#0a7d1e] dark:text-[#44FF66]',
+                advertencia: 'bg-[#fffbea] dark:bg-[#2a2200] border-[#F5A623] text-[#8a6100] dark:text-[#F5C453]',
+                error: 'bg-[#fff2f2] dark:bg-[#1D0002] border-[#F53003] text-[#F53003] dark:text-[#FF4433]',
+            };
+
+            function mostrarFeedback(tipo, mensaje) {
+                ventaFeedback.className = `mb-4 rounded-sm border px-4 py-3 text-sm ${CLASES_FEEDBACK[tipo]}`;
+                ventaFeedback.textContent = mensaje;
+                ventaFeedback.hidden = false;
+            }
+
+            // Vacía el carrito (y el uuid_dispositivo ya usado, para que la
+            // PRÓXIMA venta genere uno nuevo — ver enviarOEncolar en
+            // offline.js) y deja la página lista para cargar la siguiente
+            // venta sin navegar a ningún lado: es el flujo real de un
+            // mostrador, una venta atrás de la otra.
+            function resetearParaProximaVenta() {
+                carrito = [];
+                const uuidInput = ventaForm.querySelector('input[name="uuid_dispositivo"]');
+                if (uuidInput) {
+                    uuidInput.remove();
+                }
+                render();
+                productoSearch.focus();
+            }
+
+            ventaForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+
+                if (carrito.length === 0 || registrarBtn.disabled) {
+                    return;
+                }
+
+                registrarBtn.disabled = true;
+                ventaFeedback.hidden = true;
+
+                const resultado = await window.offlineSync.enviarOEncolar(ventaForm, 'venta');
+
+                if (resultado.estado === 'enviada') {
+                    mostrarFeedback('exito', 'Venta registrada correctamente.');
+                    resetearParaProximaVenta();
+                    return;
+                }
+
+                if (resultado.estado === 'encolada') {
+                    mostrarFeedback('advertencia', 'Venta guardada localmente, se va a sincronizar sola cuando vuelva la conexión.');
+                    resetearParaProximaVenta();
+                    return;
+                }
+
+                // 'error': el servidor respondió pero rechazó la venta (no es
+                // un problema de conectividad — reintentar el mismo carrito
+                // no lo arregla solo). Mostramos el detalle si vino como JSON
+                // de validación; el carrito queda tal cual para corregirlo.
+                let mensaje = 'No se pudo registrar la venta.';
+                try {
+                    const cuerpo = await resultado.response.json();
+                    if (cuerpo && cuerpo.errors) {
+                        mensaje = Object.values(cuerpo.errors).flat().join(' ');
+                    }
+                } catch (error) {
+                    // La respuesta no era JSON: nos quedamos con el mensaje genérico.
+                }
+
+                mostrarFeedback('error', mensaje);
+                registrarBtn.disabled = carrito.length === 0;
+            });
         })();
     </script>
 @endsection

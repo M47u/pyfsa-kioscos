@@ -14,6 +14,12 @@
     <x-status-banner />
     <x-validation-errors />
 
+    {{-- Offline (ver CLAUDE.md, arquitectura offline y resources/js/offline.js):
+         mismo criterio que ventas/create.blade.php para el form de
+         "Registrar pago" — éxito / guardado localmente / error, sin
+         navegar a ningún lado. --}}
+    <div id="pago-feedback" hidden class="mb-4 rounded-sm border px-4 py-3 text-sm"></div>
+
     {{-- $saldo se calcula UNA sola vez y se pasa a superaLimite() en
          las dos veces que se usa más abajo, en vez de dejar que cada
          llamada recalcule saldo() desde cero (mismo bug ya arreglado
@@ -173,12 +179,25 @@
     <script>
         (function () {
             const pagoForm = document.getElementById('pago-form');
+            const pagoFeedback = document.getElementById('pago-feedback');
             const montoInput = document.getElementById('monto');
             const abrirConfirmarBtn = document.getElementById('abrir-confirmar-pago');
             const dialog = document.getElementById('confirmar-pago-dialog');
             const montoConfirmarSpan = document.getElementById('monto-a-confirmar');
             const confirmarBtn = document.getElementById('confirmar-pago-dialog-confirmar');
             const cancelarBtn = document.getElementById('confirmar-pago-dialog-cancelar');
+
+            const CLASES_FEEDBACK = {
+                exito: 'bg-[#f0fff2] dark:bg-[#00220a] border-[#03F53B] text-[#0a7d1e] dark:text-[#44FF66]',
+                advertencia: 'bg-[#fffbea] dark:bg-[#2a2200] border-[#F5A623] text-[#8a6100] dark:text-[#F5C453]',
+                error: 'bg-[#fff2f2] dark:bg-[#1D0002] border-[#F53003] text-[#F53003] dark:text-[#FF4433]',
+            };
+
+            function mostrarFeedback(tipo, mensaje) {
+                pagoFeedback.className = `mb-4 rounded-sm border px-4 py-3 text-sm ${CLASES_FEEDBACK[tipo]}`;
+                pagoFeedback.textContent = mensaje;
+                pagoFeedback.hidden = false;
+            }
 
             abrirConfirmarBtn.addEventListener('click', () => {
                 // El botón ya no es type="submit", así que la validación
@@ -193,9 +212,49 @@
                 dialog.showModal();
             });
 
-            confirmarBtn.addEventListener('click', () => {
+            // Offline (ver CLAUDE.md, arquitectura offline y
+            // resources/js/offline.js): antes de esto confirmar disparaba un
+            // POST nativo (pagoForm.submit()) — ahora se intenta un fetch
+            // primero y, si falla por falta de conexión, se encola el pago
+            // en IndexedDB en vez de perderlo.
+            confirmarBtn.addEventListener('click', async () => {
                 dialog.close();
-                pagoForm.submit();
+                pagoFeedback.hidden = true;
+
+                const resultado = await window.offlineSync.enviarOEncolar(pagoForm, 'pago');
+
+                if (resultado.estado === 'enviada') {
+                    mostrarFeedback('exito', 'Pago registrado correctamente.');
+                    // Recarga para reflejar el saldo y el historial ya
+                    // actualizados — el mensaje de arriba se alcanza a ver
+                    // un instante antes de refrescar.
+                    window.setTimeout(() => window.location.reload(), 700);
+                    return;
+                }
+
+                if (resultado.estado === 'encolada') {
+                    mostrarFeedback('advertencia', 'Pago guardado localmente, se va a sincronizar solo cuando vuelva la conexión.');
+                    montoInput.value = '';
+                    const uuidInput = pagoForm.querySelector('input[name="uuid_dispositivo"]');
+                    if (uuidInput) {
+                        uuidInput.remove();
+                    }
+                    return;
+                }
+
+                // 'error': el servidor respondió pero rechazó el pago (no es
+                // un problema de conectividad).
+                let mensaje = 'No se pudo registrar el pago.';
+                try {
+                    const cuerpo = await resultado.response.json();
+                    if (cuerpo && cuerpo.errors) {
+                        mensaje = Object.values(cuerpo.errors).flat().join(' ');
+                    }
+                } catch (error) {
+                    // La respuesta no era JSON: nos quedamos con el mensaje genérico.
+                }
+
+                mostrarFeedback('error', mensaje);
             });
 
             cancelarBtn.addEventListener('click', () => dialog.close());
