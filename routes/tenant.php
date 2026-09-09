@@ -68,7 +68,9 @@ Route::middleware([
         Route::resource('productos', ProductoController::class)->except(['show', 'destroy']);
         Route::post('productos/{producto}/reponer', [ProductoController::class, 'reponerStock'])->name('productos.reponer');
 
-        Route::resource('usuarios', UsuarioController::class)->only(['index', 'create', 'store']);
+        Route::resource('usuarios', UsuarioController::class)->only(['index', 'create', 'store', 'destroy']);
+        Route::get('usuarios/{usuario}/password', [UsuarioController::class, 'editPassword'])->name('usuarios.password.edit');
+        Route::put('usuarios/{usuario}/password', [UsuarioController::class, 'updatePassword'])->name('usuarios.password.update');
 
         // Anular venta/pago (documento de alcance — corrección de error
         // humano): dueño-only aunque ventas/clientes en sí son compartidas

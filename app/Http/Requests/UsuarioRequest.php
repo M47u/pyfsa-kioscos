@@ -45,6 +45,17 @@ class UsuarioRequest extends FormRequest
                 'string',
                 'email',
                 'max:255',
+                // NO excluye soft-deleted a propósito (a diferencia de la
+                // validación): la columna `email` tiene un UNIQUE real a
+                // nivel de base (users_email_unique) que no sabe nada de
+                // `deleted_at` — un WHERE en la regla de Laravel solo haría
+                // que la VALIDACIÓN deje pasar el alta, para que después
+                // explote con un 500 real por violar el índice único al
+                // insertar. Limitación conocida: el email de un empleado
+                // eliminado queda reservado (no se puede reusar) hasta que
+                // se resuelva con una migración aparte (ej. índice único
+                // parcial vía columna generada) — no es parte de este
+                // cambio.
                 Rule::unique(config('tenancy.database.central_connection').'.users', 'email'),
             ],
             'password' => ['required', 'confirmed', Password::defaults()],

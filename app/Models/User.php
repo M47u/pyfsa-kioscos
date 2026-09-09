@@ -6,6 +6,7 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Stancl\Tenancy\Database\Concerns\CentralConnection;
@@ -28,6 +29,18 @@ class User extends Authenticatable
      * de stancl/tenancy.
      */
     use CentralConnection;
+
+    /**
+     * Eliminación lógica (documento de alcance, módulo 3.5 "Usuarios" —
+     * ver UsuarioController::destroy()): un empleado "eliminado" nunca se
+     * borra de verdad, sigue siendo el `user_id` de sus ventas/pagos
+     * históricos. `deleted_at` también saca al usuario del guard de auth
+     * sin nada extra que hacer: Auth::attempt() resuelve por Eloquent, que
+     * respeta este scope global — un usuario soft-deleted no puede volver
+     * a loguearse solo por tener este trait, no hace falta chequearlo a
+     * mano en LoginRequest.
+     */
+    use SoftDeletes;
 
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
