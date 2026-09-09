@@ -20,35 +20,10 @@
     <form method="POST" action="{{ route('ventas.store') }}" id="venta-form" class="space-y-6">
         @csrf
 
+        {{-- Orden del flujo real de mostrador: primero se cargan los
+             artículos (escaneo/búsqueda + cantidad), recién al final se
+             elige cómo se cobra — no al revés. --}}
         <div>
-            <label for="medio_pago" class="block text-sm font-medium mb-1">Medio de pago</label>
-            <select
-                id="medio_pago"
-                name="medio_pago"
-                required
-                class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
-            >
-                <option value="efectivo">Efectivo</option>
-                <option value="transferencia">Transferencia</option>
-                <option value="fiado">Fiado</option>
-            </select>
-        </div>
-
-        <div id="cliente-wrapper" hidden>
-            <label for="cliente_id" class="block text-sm font-medium mb-1">Cliente</label>
-            <select
-                id="cliente_id"
-                name="cliente_id"
-                class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
-            >
-                <option value="">-- Seleccionar cliente --</option>
-                @foreach ($clientes as $cliente)
-                    <option value="{{ $cliente->id }}">{{ $cliente->nombre }}</option>
-                @endforeach
-            </select>
-        </div>
-
-        <div class="border-t border-[#19140035] dark:border-[#3E3E3A] pt-4">
             <label for="producto-search" class="block text-sm font-medium mb-1">Buscar o escanear producto</label>
             {{--
                 Input de texto, no <select>: un lector de código de barras
@@ -109,6 +84,55 @@
             Total: $<span id="total-venta">0.00</span>
         </div>
 
+        {{-- Recién acá, con los artículos ya cargados, se elige cómo se cobra. --}}
+        <div class="border-t border-[#19140035] dark:border-[#3E3E3A] pt-4">
+            <label for="medio_pago" class="block text-sm font-medium mb-1">Medio de pago</label>
+            <select
+                id="medio_pago"
+                name="medio_pago"
+                required
+                class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
+            >
+                <option value="efectivo">Efectivo</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="fiado">Fiado</option>
+            </select>
+        </div>
+
+        <div id="cliente-wrapper" hidden>
+            <label for="cliente_id" class="block text-sm font-medium mb-1">Cliente</label>
+            <select
+                id="cliente_id"
+                name="cliente_id"
+                class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
+            >
+                <option value="">-- Seleccionar cliente --</option>
+                @foreach ($clientes as $cliente)
+                    <option value="{{ $cliente->id }}">{{ $cliente->nombre }}</option>
+                @endforeach
+            </select>
+        </div>
+
+        {{-- Solo con "Efectivo": calculadora de vuelto. Deliberadamente sin
+             `name` — es una ayuda para el cajero, no un dato que la venta
+             guarde (no está en el alcance original ni se pidió persistirlo);
+             sin `name` el navegador nunca lo manda en el POST/FormData, así
+             que no hace falta tocar VentaRequest ni offline.js para nada. --}}
+        <div id="monto-efectivo-wrapper" hidden>
+            <label for="monto-efectivo-input" class="block text-sm font-medium mb-1">Monto abonado en efectivo</label>
+            <input
+                type="number"
+                id="monto-efectivo-input"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
+            >
+            <p class="mt-1 text-sm">
+                Vuelto: $<span id="vuelto-venta">0.00</span>
+            </p>
+        </div>
+
         <button
             type="submit"
             id="registrar-venta-btn"
@@ -122,6 +146,18 @@
     <div class="mt-4 text-center">
         <a href="{{ route('ventas.index') }}" class="text-sm underline">Volver a ventas</a>
     </div>
+
+    {{-- Mismo componente que la confirmación de pago en clientes/show.blade.php
+         — ver el <script> de abajo para cuándo se abre. --}}
+    <x-confirm-dialog
+        id="confirmar-salir-dialog"
+        titulo="¿Salir sin registrar la venta?"
+        confirmar-label="Salir de todos modos"
+        cancelar-label="Seguir cargando"
+    >
+        Tenés <strong><span id="cantidad-items-carrito">0</span> artículo(s)</strong> cargados en el carrito.
+        Si salís ahora, <strong>esta venta no se va a registrar</strong>.
+    </x-confirm-dialog>
 
     <script>
         (function () {
@@ -138,9 +174,13 @@
             const itemsInputs = document.getElementById('items-inputs');
             const totalSpan = document.getElementById('total-venta');
             const registrarBtn = document.getElementById('registrar-venta-btn');
+            const montoEfectivoWrapper = document.getElementById('monto-efectivo-wrapper');
+            const montoEfectivoInput = document.getElementById('monto-efectivo-input');
+            const vueltoSpan = document.getElementById('vuelto-venta');
 
             let carrito = [];
             let resultadosActuales = [];
+            let totalActual = 0;
 
             function debounce(fn, ms) {
                 let timeoutId;
@@ -253,11 +293,32 @@
                 }
             });
 
-            function toggleCliente() {
-                clienteWrapper.hidden = medioPagoSelect.value !== 'fiado';
+            // Vuelto = lo que abona el cliente en efectivo - el total de la
+            // venta. Se recalcula acá (input del monto) Y desde render() de
+            // abajo (el total cambia cada vez que se agrega/quita un
+            // artículo) — ambos casos convergen en esta única función para
+            // no duplicar la cuenta en dos lugares.
+            function actualizarVuelto() {
+                const montoEfectivo = parseFloat(montoEfectivoInput.value);
+                const vuelto = (isNaN(montoEfectivo) ? 0 : montoEfectivo) - totalActual;
+
+                vueltoSpan.textContent = vuelto.toFixed(2);
+                vueltoSpan.classList.toggle('text-[#F53003]', vuelto < 0);
+                vueltoSpan.classList.toggle('dark:text-[#FF4433]', vuelto < 0);
             }
-            medioPagoSelect.addEventListener('change', toggleCliente);
-            toggleCliente();
+
+            montoEfectivoInput.addEventListener('input', actualizarVuelto);
+
+            function toggleMedioPago() {
+                clienteWrapper.hidden = medioPagoSelect.value !== 'fiado';
+
+                montoEfectivoWrapper.hidden = medioPagoSelect.value !== 'efectivo';
+                if (!montoEfectivoWrapper.hidden) {
+                    actualizarVuelto();
+                }
+            }
+            medioPagoSelect.addEventListener('change', toggleMedioPago);
+            toggleMedioPago();
 
             function render() {
                 carritoBody.innerHTML = '';
@@ -280,7 +341,15 @@
                     row.appendChild(tdNombre);
 
                     row.insertAdjacentHTML('beforeend', `
-                        <td class="py-2 pr-4">${item.cantidad}</td>
+                        <td class="py-2 pr-4">
+                            <input
+                                type="number"
+                                min="1"
+                                value="${item.cantidad}"
+                                data-index="${index}"
+                                class="cantidad-item w-16 rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-2 py-1 text-sm"
+                            >
+                        </td>
                         <td class="py-2 pr-4">${item.precio.toFixed(2)}</td>
                         <td class="py-2 pr-4">${subtotal.toFixed(2)}</td>
                         <td class="py-2"><button type="button" data-index="${index}" class="quitar-item underline text-sm">Quitar</button></td>
@@ -294,8 +363,32 @@
                 });
 
                 carritoVacioMsg.hidden = carrito.length > 0;
+                totalActual = total;
                 totalSpan.textContent = total.toFixed(2);
                 registrarBtn.disabled = carrito.length === 0;
+
+                if (!montoEfectivoWrapper.hidden) {
+                    actualizarVuelto();
+                }
+
+                // 'change' (blur/Enter), no 'input': cada cambio dispara
+                // render(), que reconstruye el <tbody> entero — si
+                // reaccionara a cada tecla, el input perdería el foco a
+                // mitad de tipear un número de más de un dígito.
+                carritoBody.querySelectorAll('.cantidad-item').forEach((input) => {
+                    input.addEventListener('change', () => {
+                        const index = Number(input.dataset.index);
+                        const cantidad = parseInt(input.value, 10);
+
+                        if (!cantidad || cantidad < 1) {
+                            input.value = carrito[index].cantidad; // revierte, no deja cantidad inválida
+                            return;
+                        }
+
+                        carrito[index].cantidad = cantidad;
+                        render();
+                    });
+                });
 
                 carritoBody.querySelectorAll('.quitar-item').forEach((btn) => {
                     btn.addEventListener('click', () => {
@@ -336,6 +429,7 @@
                 if (uuidInput) {
                     uuidInput.remove();
                 }
+                montoEfectivoInput.value = '';
                 render();
                 productoSearch.focus();
             }
@@ -380,6 +474,91 @@
 
                 mostrarFeedback('error', mensaje);
                 registrarBtn.disabled = carrito.length === 0;
+            });
+
+            // Avisar antes de perder una venta a medio cargar. Dos capas,
+            // porque no hay una sola API que cubra todas las formas de
+            // "salir" de una página server-rendered como esta:
+            //
+            // 1) beforeunload: red de seguridad para lo que NO pasa por un
+            //    <a> de acá adentro — cerrar la pestaña, escribir otra URL,
+            //    recargar, atrás/adelante del navegador. Todos los
+            //    navegadores modernos IGNORAN el mensaje custom por
+            //    seguridad (anti-spam de popups) y muestran el suyo
+            //    genérico — no hay forma de poner "esta venta no se va a
+            //    registrar" ahí, es una limitación real del navegador.
+            // 2) Click en cualquier <a> de la página: layouts/nav.blade.php
+            //    se renderiza como parte de ESTE MISMO documento (Blade
+            //    @@include), así que un solo listener delegado en document
+            //    cubre el nav entero + "Volver a ventas" sin tocar el
+            //    layout compartido. Acá SÍ podemos mostrar el modal propio
+            //    con el mensaje real, porque interceptamos el click ANTES
+            //    de que el navegador dispare la navegación (y por lo tanto
+            //    antes de que dispare beforeunload).
+            const confirmarSalirDialog = document.getElementById('confirmar-salir-dialog');
+            const confirmarSalirBtn = document.getElementById('confirmar-salir-dialog-confirmar');
+            const cancelarSalirBtn = document.getElementById('confirmar-salir-dialog-cancelar');
+            const cantidadItemsCarritoSpan = document.getElementById('cantidad-items-carrito');
+            const logoutForm = document.querySelector('form[action*="logout"]');
+            let destinoPendiente = null;
+
+            function hayVentaSinRegistrar() {
+                return carrito.length > 0;
+            }
+
+            function avisarAntesDeSalir(event) {
+                if (!hayVentaSinRegistrar()) {
+                    return;
+                }
+                event.preventDefault();
+                event.returnValue = ''; // requerido por Chrome para mostrar el prompt
+            }
+            window.addEventListener('beforeunload', avisarAntesDeSalir);
+
+            document.addEventListener('click', (event) => {
+                const link = event.target.closest('a[href]');
+                if (!link || !hayVentaSinRegistrar()) {
+                    return;
+                }
+
+                event.preventDefault();
+                destinoPendiente = link.href;
+                cantidadItemsCarritoSpan.textContent = carrito.length;
+                confirmarSalirDialog.showModal();
+            });
+
+            // "Salir" (logout) es un <form> que se manda con submit, no un
+            // link — mismo aviso, mismo modal.
+            if (logoutForm) {
+                logoutForm.addEventListener('submit', (event) => {
+                    if (!hayVentaSinRegistrar()) {
+                        return;
+                    }
+                    event.preventDefault();
+                    destinoPendiente = logoutForm;
+                    cantidadItemsCarritoSpan.textContent = carrito.length;
+                    confirmarSalirDialog.showModal();
+                });
+            }
+
+            confirmarSalirBtn.addEventListener('click', () => {
+                confirmarSalirDialog.close();
+
+                // Sin esto, salir "de verdad" tras confirmar acá dispararía
+                // TAMBIÉN el prompt nativo de beforeunload — dos avisos
+                // seguidos por la misma salida ya confirmada.
+                window.removeEventListener('beforeunload', avisarAntesDeSalir);
+
+                if (destinoPendiente instanceof HTMLFormElement) {
+                    destinoPendiente.submit();
+                } else if (destinoPendiente) {
+                    window.location.href = destinoPendiente;
+                }
+            });
+
+            cancelarSalirBtn.addEventListener('click', () => {
+                confirmarSalirDialog.close();
+                destinoPendiente = null;
             });
         })();
     </script>
