@@ -55,7 +55,19 @@ class ProductoImportController extends Controller
     {
         $handle = fopen($request->file('archivo')->getRealPath(), 'r');
 
-        $encabezado = fgetcsv($handle);
+        // Excel en configuración regional de Argentina/Paraguay (coma como
+        // separador DECIMAL) exporta e interpreta CSV con punto y coma como
+        // separador de columnas, no coma — es lo que genera plantilla() de
+        // abajo. Pero alguien puede perfectamente subir un CSV real
+        // separado por comas (otra fuente, otro Excel en inglés), así que
+        // se detecta por archivo en vez de asumir uno solo: se cuenta cuál
+        // de los dos aparece más en la primera línea (el encabezado, sin
+        // comillas ni texto libre que pueda confundir el conteo).
+        $primeraLinea = fgets($handle);
+        rewind($handle);
+        $separador = substr_count((string) $primeraLinea, ';') > substr_count((string) $primeraLinea, ',') ? ';' : ',';
+
+        $encabezado = fgetcsv($handle, separator: $separador);
 
         if ($encabezado === false || $encabezado === [null]) {
             fclose($handle);
@@ -92,7 +104,7 @@ class ProductoImportController extends Controller
         $codigosVistos = [];
         $numeroFila = 1; // la fila 1 del archivo es el encabezado.
 
-        while (($fila = fgetcsv($handle)) !== false) {
+        while (($fila = fgetcsv($handle, separator: $separador)) !== false) {
             $numeroFila++;
 
             // Línea vacía (típicamente al final del archivo): fgetcsv la
@@ -105,6 +117,33 @@ class ProductoImportController extends Controller
                 ? trim((string) ($fila[$indices[$columna]] ?? ''))
                 : '';
 
+            // "800,50" -> "800.50" (y "1.234,56" -> "1234.56", con punto de
+            // miles): mismo motivo regional que el separador de columnas de
+            // arriba — Argentina/Paraguay usan la coma como separador
+            // DECIMAL, y `numeric` de Laravel solo entiende punto. Solo
+            // tiene sentido si el separador de COLUMNAS es ';': con un
+            // archivo separado por comas, una coma decimal dentro de un
+            // precio ya habría partido la fila en dos columnas antes de
+            // llegar acá — no hay forma de distinguir "coma decimal" de
+            // "coma separadora" en ese caso, así que ni se intenta.
+            $leerPrecio = function (string $columna) use ($leer, $separador): string {
+                $valor = $leer($columna);
+
+                if ($separador !== ';' || $valor === '') {
+                    return $valor;
+                }
+
+                // Si aparecen los dos, el punto es de miles (se descarta) y
+                // la coma pasa a ser el decimal. Si solo hay coma, es
+                // directamente el decimal. Un valor ya en formato válido
+                // ("800.50", sin comas) queda intacto.
+                if (str_contains($valor, ',') && str_contains($valor, '.')) {
+                    return str_replace(',', '.', str_replace('.', '', $valor));
+                }
+
+                return str_replace(',', '.', $valor);
+            };
+
             $codigoBarras = $leer('codigo_barras') !== '' ? $leer('codigo_barras') : null;
 
             if ($codigoBarras !== null && in_array($codigoBarras, $codigosVistos, true)) {
@@ -116,8 +155,8 @@ class ProductoImportController extends Controller
             $datos = [
                 'nombre' => $leer('nombre'),
                 'codigo_barras' => $codigoBarras,
-                'precio_costo' => $leer('precio_costo'),
-                'precio_venta' => $leer('precio_venta'),
+                'precio_costo' => $leerPrecio('precio_costo'),
+                'precio_venta' => $leerPrecio('precio_venta'),
                 'stock_minimo' => $leer('stock_minimo') !== '' ? $leer('stock_minimo') : 0,
                 'stock_inicial' => $leer('stock_inicial') !== '' ? $leer('stock_inicial') : 0,
             ];
@@ -169,6 +208,15 @@ class ProductoImportController extends Controller
      * CSV de ejemplo descargable desde el propio formulario de importación.
      * Generado al vuelo (más simple de mantener que un archivo estático:
      * si algún día cambia el encabezado esperado, cambia en un solo lugar).
+     *
+     * Separador ';', no ',': Excel en configuración regional de Argentina/
+     * Paraguay (mercado objetivo, ver documento de alcance) usa la coma
+     * como separador DECIMAL, así que su separador de LISTA/CSV es punto y
+     * coma — un CSV separado por comas, al abrirlo con doble click desde
+     * el explorador de archivos (no "Datos > Desde texto"), Excel lo
+     * interpreta mal y mete todo en una sola columna. store() de arriba
+     * igual detecta el separador real del archivo subido, así que sigue
+     * aceptando un CSV separado por comas si viene de otro lado.
      */
     public function plantilla(): Response
     {
@@ -182,7 +230,7 @@ class ProductoImportController extends Controller
         $handle = fopen('php://temp', 'r+');
 
         foreach ($filas as $fila) {
-            fputcsv($handle, $fila);
+            fputcsv($handle, $fila, separator: ';');
         }
 
         rewind($handle);

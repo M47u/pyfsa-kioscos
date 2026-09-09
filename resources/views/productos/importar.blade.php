@@ -33,12 +33,14 @@
             CSV con encabezado, columnas identificadas por nombre (no importa el orden):
         </p>
         <p class="font-mono text-xs bg-[#f5f5f4] dark:bg-[#161615] rounded-sm px-2 py-1">
-            nombre,codigo_barras,precio_costo,precio_venta,stock_minimo,stock_inicial
+            nombre;codigo_barras;precio_costo;precio_venta;stock_minimo;stock_inicial
         </p>
         <ul class="list-disc list-inside">
             <li><strong>nombre</strong>, <strong>precio_costo</strong> y <strong>precio_venta</strong> son obligatorios.</li>
             <li><strong>codigo_barras</strong> y <strong>stock_inicial</strong> son opcionales.</li>
             <li>Un código de barras repetido (contra el catálogo o dentro del mismo archivo) hace fallar esa fila, no el archivo entero.</li>
+            <li>Separador punto y coma (<strong>;</strong>) — es lo que espera Excel en español al abrir un CSV con doble click. Si tu archivo viene separado por comas de otro lado, también funciona: se detecta solo.</li>
+            <li>Los precios aceptan coma decimal (<strong>800,50</strong>) y punto de miles (<strong>1.234,56</strong>) — solo en un archivo separado por punto y coma.</li>
         </ul>
         <p>
             <a href="{{ route('productos.importar.plantilla') }}" class="underline">Descargar planilla de ejemplo</a>
