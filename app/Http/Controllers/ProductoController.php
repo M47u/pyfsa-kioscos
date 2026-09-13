@@ -95,7 +95,7 @@ class ProductoController extends Controller
             ]);
         }
 
-        return redirect()->route('productos.index')->with('status', 'Producto creado correctamente.');
+        return redirect()->route('productos.index')->with('status', 'Artículo creado correctamente.');
     }
 
     public function edit(Producto $producto): View
@@ -109,7 +109,7 @@ class ProductoController extends Controller
     {
         $producto->update($request->validated());
 
-        return redirect()->route('productos.index')->with('status', 'Producto actualizado correctamente.');
+        return redirect()->route('productos.index')->with('status', 'Artículo actualizado correctamente.');
     }
 
     /**

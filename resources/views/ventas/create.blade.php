@@ -24,7 +24,7 @@
              artículos (escaneo/búsqueda + cantidad), recién al final se
              elige cómo se cobra — no al revés. --}}
         <div>
-            <label for="producto-search" class="block text-sm font-medium mb-1">Buscar o escanear producto</label>
+            <label for="producto-search" class="block text-sm font-medium mb-1">Buscar o escanear artículo</label>
             {{--
                 Input de texto, no <select>: un lector de código de barras
                 USB/Bluetooth "tipea" el código acá adentro y manda un Enter
@@ -57,7 +57,7 @@
                 >
             </div>
             <p id="producto-sin-resultados" hidden class="mt-1 text-xs opacity-70">
-                No se encontró ningún producto con ese nombre o código.
+                No se encontró ningún artículo con ese nombre o código.
             </p>
         </div>
 
@@ -65,7 +65,7 @@
             <table class="w-full text-sm border-collapse">
                 <thead>
                     <tr class="text-left border-b border-[#19140035] dark:border-[#3E3E3A]">
-                        <th class="py-2 pr-4">Producto</th>
+                        <th class="py-2 pr-4">Artículo</th>
                         <th class="py-2 pr-4">Cantidad</th>
                         <th class="py-2 pr-4">Precio unit.</th>
                         <th class="py-2 pr-4">Subtotal</th>

@@ -1,5 +1,15 @@
 @import 'tailwindcss';
 
+/*
+ * Modo nocturno elegido por el usuario (layouts/app.blade.php), no solo
+ * el prefers-color-scheme del sistema operativo. Por default Tailwind
+ * resuelve `dark:` contra la media query nomás; redefinir la variante acá
+ * hace que dependa de la clase `.dark` en <html> en su lugar — el script
+ * del layout sigue arrancando desde system preference si el usuario nunca
+ * tocó el toggle, pero una vez que lo usa, gana su elección explícita.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';

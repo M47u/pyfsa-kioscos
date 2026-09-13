@@ -42,7 +42,7 @@
             confirmar-label="Sí, anular venta"
             cancelar-label="Cancelar"
         >
-            Esta acción revierte el stock de los productos vendidos y deja de contar la venta en reportes y en el
+            Esta acción revierte el stock de los artículos vendidos y deja de contar la venta en reportes y en el
             saldo del cliente (si era fiada). La venta queda en el historial marcada como anulada — no se borra.
 
             <label for="motivo-anulacion-venta" class="block mt-3 text-xs opacity-70">Motivo (opcional)</label>
@@ -97,7 +97,7 @@
                             @if ($venta->sincronizada_con_stock_insuficiente)
                                 <span
                                     class="rounded-sm bg-[#fffbea] dark:bg-[#2a2200] border border-[#F5A623] text-[#8a6100] dark:text-[#F5C453] px-2 py-0.5 text-xs font-medium"
-                                    title="Esta venta se sincronizó desde la cola offline dejando stock negativo. Revisar el stock del producto."
+                                    title="Esta venta se sincronizó desde la cola offline dejando stock negativo. Revisar el stock del artículo."
                                 >
                                     ⚠ sincronizada con stock insuficiente
                                 </span>

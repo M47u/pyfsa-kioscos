@@ -17,7 +17,7 @@
      en routes/tenant.php) — un empleado solo ve Ventas y Clientes acá. --}}
 @php
     $secciones = collect([
-        ['ruta' => 'productos.index', 'activo' => 'productos.*', 'label' => 'Productos', 'dueno' => true],
+        ['ruta' => 'productos.index', 'activo' => 'productos.*', 'label' => 'Artículos', 'dueno' => true],
         ['ruta' => 'clientes.index', 'activo' => 'clientes.*', 'label' => 'Clientes', 'dueno' => false],
         ['ruta' => 'ventas.index', 'activo' => 'ventas.*', 'label' => 'Ventas', 'dueno' => false],
         ['ruta' => 'reportes.index', 'activo' => 'reportes.*', 'label' => 'Reportes', 'dueno' => true],

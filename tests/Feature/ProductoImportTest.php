@@ -36,7 +36,7 @@ class ProductoImportTest extends TenantTestCase
         ]);
 
         $response->assertRedirect(route('productos.importar'));
-        $response->assertSessionHas('status', 'Se importaron 3 producto(s) correctamente.');
+        $response->assertSessionHas('status', 'Se importaron 3 artículo(s) correctamente.');
 
         $this->assertDatabaseCount('productos', 3);
 
@@ -82,7 +82,7 @@ class ProductoImportTest extends TenantTestCase
         ]);
 
         $response->assertRedirect(route('productos.importar'));
-        $response->assertSessionHas('status', 'Se importaron 2 producto(s) correctamente.');
+        $response->assertSessionHas('status', 'Se importaron 2 artículo(s) correctamente.');
 
         $errores = session('importacion_errores');
         $this->assertCount(1, $errores);
@@ -112,7 +112,7 @@ class ProductoImportTest extends TenantTestCase
         ]);
 
         $response->assertRedirect(route('productos.importar'));
-        $response->assertSessionHas('status', 'Se importaron 1 producto(s) correctamente.');
+        $response->assertSessionHas('status', 'Se importaron 1 artículo(s) correctamente.');
 
         $producto = Producto::where('codigo_barras', '7790895000000')->firstOrFail();
         $this->assertSame('Coca Cola 1.5L', $producto->nombre);
@@ -152,7 +152,7 @@ class ProductoImportTest extends TenantTestCase
         ]);
 
         $response->assertRedirect(route('productos.importar'));
-        $response->assertSessionHas('status', 'Se importaron 3 producto(s) correctamente.');
+        $response->assertSessionHas('status', 'Se importaron 3 artículo(s) correctamente.');
         $this->assertDatabaseCount('productos', 3);
     }
 
@@ -175,7 +175,7 @@ class ProductoImportTest extends TenantTestCase
         ]);
 
         $response->assertRedirect(route('productos.importar'));
-        $response->assertSessionHas('status', 'Se importaron 2 producto(s) correctamente.');
+        $response->assertSessionHas('status', 'Se importaron 2 artículo(s) correctamente.');
 
         $coca = Producto::where('codigo_barras', '7790895000000')->firstOrFail();
         $this->assertSame(24, $coca->stockActual());
@@ -198,7 +198,7 @@ class ProductoImportTest extends TenantTestCase
         ]);
 
         $response->assertRedirect(route('productos.importar'));
-        $response->assertSessionHas('status', 'Se importaron 1 producto(s) correctamente.');
+        $response->assertSessionHas('status', 'Se importaron 1 artículo(s) correctamente.');
 
         $producto = Producto::where('codigo_barras', '7790895000000')->firstOrFail();
         $this->assertSame(800.5, (float) $producto->precio_costo);
@@ -221,7 +221,7 @@ class ProductoImportTest extends TenantTestCase
         ]);
 
         $response->assertRedirect(route('productos.importar'));
-        $response->assertSessionHas('status', 'Se importaron 1 producto(s) correctamente.');
+        $response->assertSessionHas('status', 'Se importaron 1 artículo(s) correctamente.');
 
         $producto = Producto::where('codigo_barras', '7790895000000')->firstOrFail();
         $this->assertSame(1234.56, (float) $producto->precio_costo);
@@ -247,7 +247,7 @@ class ProductoImportTest extends TenantTestCase
         ]);
 
         $response->assertRedirect(route('productos.importar'));
-        $response->assertSessionHas('status', 'Se importaron 0 producto(s) correctamente.');
+        $response->assertSessionHas('status', 'Se importaron 0 artículo(s) correctamente.');
         $this->assertCount(1, session('importacion_errores'));
     }
 }

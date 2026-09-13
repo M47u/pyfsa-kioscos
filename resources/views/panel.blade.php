@@ -13,8 +13,8 @@
             href="{{ route('productos.index') }}"
             class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] p-4 hover:bg-[#f5f5f4] dark:hover:bg-[#161615]"
         >
-            <h2 class="text-sm font-medium mb-1">Productos</h2>
-            <p class="text-sm opacity-70">Ver stock y cargar productos nuevos.</p>
+            <h2 class="text-sm font-medium mb-1">Artículos</h2>
+            <p class="text-sm opacity-70">Ver stock y cargar artículos nuevos.</p>
         </a>
 
         <a

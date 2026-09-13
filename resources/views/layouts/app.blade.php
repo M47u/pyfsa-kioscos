@@ -6,6 +6,25 @@
     <title>{{ config('app.name', 'Laravel') }}@hasSection('title') - @yield('title')@endif</title>
 
     {{--
+        Modo de visualización (normal/nocturno) elegido por el usuario,
+        no solo el prefers-color-scheme del sistema — ver
+        resources/css/app.css (@custom-variant dark) y el botón al final
+        de <body>. Este script tiene que ir ACÁ, sin defer/async y antes
+        del @vite de más abajo: corre de forma bloqueante, antes de que el
+        navegador pinte nada, para que <html> ya tenga (o no) la clase
+        `dark` desde el primer frame — si esperara a después del body, se
+        vería un parpadeo del tema equivocado apenas antes de corregirse.
+    --}}
+    <script>
+        (function () {
+            var guardado = localStorage.getItem('tema');
+            var prefiereOscuro = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            var oscuro = guardado ? guardado === 'oscuro' : prefiereOscuro;
+            document.documentElement.classList.toggle('dark', oscuro);
+        })();
+    </script>
+
+    {{--
         Instalable, no offline: el manifest + el service worker de abajo
         alcanzan para que el navegador ofrezca "Agregar a pantalla de
         inicio", pero sw.js es un no-op a propósito — el offline real
@@ -54,12 +73,42 @@
         </div>
     </div>
 
+    {{-- Fixed, no dentro del <nav>: así aparece en TODAS las páginas por
+         igual (login, registro, panel admin, suscripción vencida...),
+         sin depender de si esa página tiene nav o no, y sin competir por
+         espacio con el ☰ de mobile ni con "Salir". --}}
+    <button
+        type="button"
+        id="theme-toggle"
+        aria-label="Cambiar modo de visualización"
+        class="fixed bottom-4 right-4 z-30 w-10 h-10 rounded-full border border-[#19140035] dark:border-[#3E3E3A] bg-[#FDFDFC] dark:bg-[#161615] shadow-md flex items-center justify-center text-base"
+    ></button>
+
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('{{ asset('sw.js') }}');
             });
         }
+
+        (function () {
+            var boton = document.getElementById('theme-toggle');
+
+            function actualizarIcono() {
+                // Muestra el modo AL QUE PASARÍAS si tocás el botón (☀️
+                // estando en oscuro, 🌙 estando en claro) — mismo criterio
+                // que cualquier switch de tema, no el modo actual.
+                boton.textContent = document.documentElement.classList.contains('dark') ? '☀️' : '🌙';
+            }
+
+            boton.addEventListener('click', function () {
+                var oscuro = document.documentElement.classList.toggle('dark');
+                localStorage.setItem('tema', oscuro ? 'oscuro' : 'claro');
+                actualizarIcono();
+            });
+
+            actualizarIcono();
+        })();
     </script>
 </body>
 </html>

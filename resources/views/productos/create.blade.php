@@ -1,12 +1,12 @@
 @extends('layouts.app')
 
-@section('title', 'Nuevo producto')
+@section('title', 'Nuevo artículo')
 
 @section('body-class', 'flex items-center justify-center p-6')
 @section('container-class', 'w-full max-w-sm')
 
 @section('content')
-    <h1 class="text-lg font-medium mb-6 text-center">Nuevo producto</h1>
+    <h1 class="text-lg font-medium mb-6 text-center">Nuevo artículo</h1>
 
     <x-validation-errors />
 
@@ -36,6 +36,6 @@
     </form>
 
     <div class="mt-4 text-center">
-        <a href="{{ route('productos.index') }}" class="text-sm underline">Volver a productos</a>
+        <a href="{{ route('productos.index') }}" class="text-sm underline">Volver a artículos</a>
     </div>
 @endsection

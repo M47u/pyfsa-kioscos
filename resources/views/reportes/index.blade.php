@@ -41,7 +41,7 @@
         {{-- Producto más vendido de la semana, por CANTIDAD (no por
              facturación) — ver ReporteController::productoMasVendidoDeLaSemana(). --}}
         <div class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] p-4">
-            <h2 class="text-sm font-medium mb-3">Producto más vendido de la semana</h2>
+            <h2 class="text-sm font-medium mb-3">Artículo más vendido de la semana</h2>
 
             @if ($productoMasVendido !== null)
                 <p class="text-base font-medium">{{ $productoMasVendido->nombre }}</p>
@@ -100,10 +100,10 @@
                 {{ $productosBajoMinimo }}
             </p>
             <p class="text-sm opacity-70 mb-3">
-                {{ $productosBajoMinimo === 1 ? 'producto por debajo de su stock mínimo' : 'productos por debajo de su stock mínimo' }}
+                {{ $productosBajoMinimo === 1 ? 'artículo por debajo de su stock mínimo' : 'artículos por debajo de su stock mínimo' }}
             </p>
 
-            <a href="{{ route('productos.index', ['bajo_minimo' => 1]) }}" class="underline text-sm">Ver productos</a>
+            <a href="{{ route('productos.index', ['bajo_minimo' => 1]) }}" class="underline text-sm">Ver artículos</a>
         </div>
 
         {{-- Offline (documento de alcance — ver CLAUDE.md, arquitectura
@@ -148,11 +148,11 @@
                         </dl>
 
                         @if ($tramo['productos']->isNotEmpty())
-                            <p class="text-xs opacity-70 mb-1">Top 5 productos (por cantidad)</p>
+                            <p class="text-xs opacity-70 mb-1">Top 5 artículos (por cantidad)</p>
                             <ol class="text-sm list-decimal list-inside space-y-0.5">
                                 @foreach ($tramo['productos'] as $fila)
                                     <li>
-                                        {{ $fila['producto']?->nombre ?? 'Producto eliminado' }}
+                                        {{ $fila['producto']?->nombre ?? 'Artículo eliminado' }}
                                         <span class="opacity-70">({{ $fila['cantidad'] }})</span>
                                     </li>
                                 @endforeach
@@ -179,7 +179,7 @@
                         <ol class="text-sm list-decimal list-inside space-y-0.5">
                             @foreach ($topFinDeSemana as $fila)
                                 <li>
-                                    {{ $fila['producto']?->nombre ?? 'Producto eliminado' }}
+                                    {{ $fila['producto']?->nombre ?? 'Artículo eliminado' }}
                                     <span class="opacity-70">({{ $fila['cantidad'] }})</span>
                                 </li>
                             @endforeach
@@ -196,7 +196,7 @@
                         <ol class="text-sm list-decimal list-inside space-y-0.5">
                             @foreach ($topDiasDeSemana as $fila)
                                 <li>
-                                    {{ $fila['producto']?->nombre ?? 'Producto eliminado' }}
+                                    {{ $fila['producto']?->nombre ?? 'Artículo eliminado' }}
                                     <span class="opacity-70">({{ $fila['cantidad'] }})</span>
                                 </li>
                             @endforeach

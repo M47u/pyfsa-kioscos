@@ -1,9 +1,9 @@
 @extends('layouts.app')
 
-@section('title', 'Importar productos')
+@section('title', 'Importar artículos')
 
 @section('content')
-    <h1 class="text-lg font-medium mb-6">Importar productos desde CSV</h1>
+    <h1 class="text-lg font-medium mb-6">Importar artículos desde CSV</h1>
 
     <x-status-banner />
 
@@ -71,6 +71,6 @@
     </form>
 
     <div class="mt-4 text-center">
-        <a href="{{ route('productos.index') }}" class="text-sm underline">Volver a productos</a>
+        <a href="{{ route('productos.index') }}" class="text-sm underline">Volver a artículos</a>
     </div>
 @endsection

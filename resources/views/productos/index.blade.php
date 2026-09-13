@@ -1,10 +1,10 @@
 @extends('layouts.app')
 
-@section('title', 'Productos')
+@section('title', 'Artículos')
 
 @section('content')
     <div class="flex items-center justify-between mb-6">
-        <h1 class="text-lg font-medium">Productos</h1>
+        <h1 class="text-lg font-medium">Artículos</h1>
         <div class="flex items-center gap-3">
             <a
                 href="{{ route('productos.importar') }}"
@@ -16,7 +16,7 @@
                 href="{{ route('productos.create') }}"
                 class="rounded-sm bg-[#1b1b18] dark:bg-[#eeeeec] text-white dark:text-[#1C1C1A] px-4 py-2 text-sm font-medium"
             >
-                Nuevo producto
+                Nuevo artículo
             </a>
         </div>
     </div>
@@ -31,7 +31,7 @@
          pise silenciosamente el filtro anterior. --}}
     @if ($bajoMinimo)
         <div class="mb-4 flex items-center justify-between rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-[#f5f5f4] dark:bg-[#161615] px-3 py-2 text-sm">
-            <span>Mostrando solo productos bajo el stock mínimo.</span>
+            <span>Mostrando solo artículos bajo el stock mínimo.</span>
             <a href="{{ route('productos.index', ['buscar' => $buscar]) }}" class="underline">Quitar filtro</a>
         </div>
     @endif
@@ -114,7 +114,7 @@
                 @empty
                     <tr>
                         <td colspan="8" class="py-4 text-center text-sm opacity-70">
-                            No hay productos cargados todavía.
+                            No hay artículos cargados todavía.
                         </td>
                     </tr>
                 @endforelse

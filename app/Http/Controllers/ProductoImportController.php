@@ -200,7 +200,7 @@ class ProductoImportController extends Controller
         fclose($handle);
 
         return redirect()->route('productos.importar')
-            ->with('status', "Se importaron {$importados} producto(s) correctamente.")
+            ->with('status', "Se importaron {$importados} artículo(s) correctamente.")
             ->with('importacion_errores', $errores);
     }
 
@@ -239,7 +239,7 @@ class ProductoImportController extends Controller
 
         return response($contenido, 200, [
             'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="plantilla-productos.csv"',
+            'Content-Disposition' => 'attachment; filename="plantilla-articulos.csv"',
         ]);
     }
 }
