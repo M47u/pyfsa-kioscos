@@ -13,6 +13,25 @@ use Illuminate\Validation\ValidationException;
 
 class LoginRequest extends FormRequest
 {
+    /**
+     * Intentos fallidos permitidos por email + IP antes de bloquear, en la
+     * ventana de un minuto que usa RateLimiter::hit() por default.
+     *
+     * 5 es el estándar de la industria (y el default de Breeze/Fortify):
+     * suficiente para un kiosquero que se equivoca tipeando en el celular
+     * del mostrador, y sin margen útil para fuerza bruta. Importa más de lo
+     * que parece porque /login es compartido — por acá entran también los
+     * admins de plataforma (is_admin, ver EnsureUserIsAdmin), cuyas
+     * cuentas dan acceso al panel de TODOS los comercios.
+     *
+     * Límite conocido, asumido: la clave incluye la IP, así que un atacante
+     * distribuido (muchas IPs contra el mismo email) sigue teniendo más
+     * margen. Es el mismo trade-off que hace Laravel de fábrica — sin la
+     * IP, cualquiera podría bloquear la cuenta de un comercio ajeno a
+     * voluntad con seis intentos basura.
+     */
+    private const INTENTOS_PERMITIDOS = 5;
+
     public function authorize(): bool
     {
         return true;
@@ -50,7 +69,7 @@ class LoginRequest extends FormRequest
 
     protected function ensureIsNotRateLimited(): void
     {
-        if (! RateLimiter::tooManyAttempts($this->throttleKey(), 5)) {
+        if (! RateLimiter::tooManyAttempts($this->throttleKey(), self::INTENTOS_PERMITIDOS)) {
             return;
         }
 
