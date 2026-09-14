@@ -7,7 +7,9 @@ namespace App\Console\Commands;
 use App\Models\RegistroAuditoria;
 use App\Models\User;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
 
 /**
  * Provisiona un administrador de PLATAFORMA (PyFsa), no de un comercio —
@@ -40,9 +42,7 @@ class CrearAdminCommand extends Command
     {
         $email = Str::lower(trim((string) $this->argument('email')));
 
-        if ($email === '') {
-            $this->error('El email no puede estar vacío.');
-
+        if (! $this->esValido(['email' => $email], ['email' => ['required', 'email']])) {
             return self::FAILURE;
         }
 
@@ -187,6 +187,17 @@ class CrearAdminCommand extends Command
      *    de preguntar y fallar ahí sería peor (dejaría el provisioning a
      *    medias sin alternativa).
      *
+     * Los caminos 1 y 2 pasan por reglasDePassword() antes de devolver: el
+     * comando exige lo mismo que el formulario web. El 3 no hace falta
+     * validarlo — Str::password(20) genera por construcción algo más
+     * fuerte que cualquier default razonable.
+     *
+     * Dónde se valida y dónde no, a propósito: la validación vive acá y no
+     * al principio de handle() porque este método solo corre en el camino
+     * "hay que crear el usuario". Si el usuario YA existe, --password se
+     * ignora (se avisa en promoverAdmin()) y no tendría sentido abortar
+     * una promoción por una opción que no se va a usar.
+     *
      * @return string|null null = no se pudo resolver, abortar.
      */
     private function resolverPassword(): ?string
@@ -196,7 +207,7 @@ class CrearAdminCommand extends Command
         if ($password !== '') {
             $this->warn('Ojo: la contraseña pasada por --password queda registrada en el historial de la shell.');
 
-            return $password;
+            return $this->esValido(['password' => $password], self::reglasDePassword()) ? $password : null;
         }
 
         if (! $this->input->isInteractive()) {
@@ -217,7 +228,49 @@ class CrearAdminCommand extends Command
             return null;
         }
 
-        return $password;
+        return $this->esValido(['password' => $password], self::reglasDePassword()) ? $password : null;
+    }
+
+    /**
+     * Las mismas reglas que exige el camino web (ver
+     * Admin\ComercioCreateRequest y UsuarioRequest): sin esto, el comando
+     * aceptaba cualquier string como contraseña de la cuenta MÁS
+     * privilegiada del sistema, mientras el formulario de alta de un
+     * empleado cualquiera sí exigía Password::defaults(). Password::
+     * defaults() y no una copia de las reglas para que endurecerlas un día
+     * (longitud mínima, listas de filtradas) alcance a los dos caminos de
+     * una sola vez.
+     *
+     * @return array<string, mixed>
+     */
+    private static function reglasDePassword(): array
+    {
+        return ['password' => ['required', Password::defaults()]];
+    }
+
+    /**
+     * Valida y, si falla, imprime TODOS los mensajes antes de devolver
+     * false — la validación de un comando de provisioning tiene que decir
+     * de una qué está mal, no obligar a descubrirlo de a un error por
+     * corrida. No se toca la base: todos los call sites abortan con
+     * FAILURE antes de cualquier escritura.
+     *
+     * @param  array<string, mixed>  $datos
+     * @param  array<string, mixed>  $reglas
+     */
+    private function esValido(array $datos, array $reglas): bool
+    {
+        $validador = Validator::make($datos, $reglas);
+
+        if ($validador->passes()) {
+            return true;
+        }
+
+        foreach ($validador->errors()->all() as $mensaje) {
+            $this->error($mensaje);
+        }
+
+        return false;
     }
 
     /**

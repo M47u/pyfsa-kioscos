@@ -252,6 +252,66 @@ class CrearAdminCommandTest extends TestCase
         $this->assertSame(0, RegistroAuditoria::count());
     }
 
+    /**
+     * El camino web (Admin\ComercioCreateRequest) exige un email con
+     * formato válido; el comando aceptaba cualquier string, y una cuenta
+     * admin con un email que no existe es una cuenta a la que nunca se le
+     * va a poder recuperar el acceso.
+     */
+    public function test_un_email_con_formato_invalido_falla_sin_crear_nada(): void
+    {
+        $this->artisan('admin:crear', [
+            'email' => 'esto-no-es-un-email',
+            '--nombre' => 'Admin Inválido',
+            '--password' => 'secreto-largo-123',
+        ])->assertFailed();
+
+        $this->assertSame(0, User::withTrashed()->count());
+    }
+
+    public function test_un_email_vacio_falla_sin_crear_nada(): void
+    {
+        $this->artisan('admin:crear', [
+            'email' => '   ',
+            '--nombre' => 'Admin Sin Email',
+            '--password' => 'secreto-largo-123',
+        ])->assertFailed();
+
+        $this->assertSame(0, User::withTrashed()->count());
+    }
+
+    /**
+     * Misma asimetría que el email: el formulario web exige
+     * Password::defaults() y el comando — que crea la cuenta MÁS
+     * privilegiada del sistema — no exigía nada.
+     */
+    public function test_una_password_corta_por_opcion_falla_sin_crear_nada(): void
+    {
+        $this->artisan('admin:crear', [
+            'email' => 'password-corta@pyfsa.test',
+            '--nombre' => 'Admin Débil',
+            '--password' => 'corta',
+        ])->assertFailed();
+
+        $this->assertNull(User::where('email', 'password-corta@pyfsa.test')->first());
+        $this->assertSame(0, RegistroAuditoria::count());
+    }
+
+    /**
+     * La validación cubre también el camino interactivo, que es el default
+     * (sin --password): no alcanza con proteger la opción explícita.
+     */
+    public function test_una_password_corta_interactiva_falla_sin_crear_nada(): void
+    {
+        $this->artisan('admin:crear', ['email' => 'interactivo-debil@pyfsa.test'])
+            ->expectsQuestion('Nombre del administrador', 'Admin Débil')
+            ->expectsQuestion('Contraseña del administrador', 'corta')
+            ->expectsQuestion('Repetí la contraseña', 'corta')
+            ->assertFailed();
+
+        $this->assertNull(User::where('email', 'interactivo-debil@pyfsa.test')->first());
+    }
+
     public function test_falla_si_las_passwords_interactivas_no_coinciden(): void
     {
         $this->artisan('admin:crear', ['email' => 'distraido@pyfsa.test'])
