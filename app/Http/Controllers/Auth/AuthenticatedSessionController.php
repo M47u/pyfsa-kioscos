@@ -24,7 +24,11 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        return redirect()->intended(route('panel'));
+        // rutaDeInicio() y no route('panel') pelado: un admin de plataforma
+        // sin comercio asignado (el caso normal de admin:crear) se
+        // estrellaba contra el 403 de InitializeTenancyByAuthenticatedUser
+        // apenas entraba. Ver el docblock de User::rutaDeInicio().
+        return redirect()->intended($request->user()->rutaDeInicio());
     }
 
     public function destroy(Request $request): RedirectResponse

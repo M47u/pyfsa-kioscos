@@ -56,7 +56,15 @@ class AppServiceProvider extends ServiceProvider
         // al último fallback: '/' (la bienvenida de Laravel). Bug real
         // reportado en producción: "vuelvo a /login logueado y me
         // muestra la de bienvenida".
-        RedirectIfAuthenticated::redirectUsing(fn () => route('panel'));
+        //
+        // rutaDeInicio() en vez de route('panel') pelado por el mismo
+        // motivo que en AuthenticatedSessionController: un admin de
+        // plataforma sin comercio no tiene nada que hacer en /panel, ahí
+        // lo espera un 403. El ?? es defensivo — si el callback corre sin
+        // usuario resuelto, el destino de siempre.
+        RedirectIfAuthenticated::redirectUsing(
+            fn (Request $request) => $request->user()?->rutaDeInicio() ?? route('panel')
+        );
 
         // Limiter con nombre (en vez de un `throttle:20,1` pelado en la
         // ruta) para tener el porqué del número acá, junto a la constante,

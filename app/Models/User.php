@@ -98,6 +98,31 @@ class User extends Authenticatable
     }
 
     /**
+     * A dónde mandar a este usuario cuando la app tiene que llevarlo "a su
+     * home": después de un login exitoso (AuthenticatedSessionController)
+     * y cuando el middleware 'guest' rebota a alguien ya logueado que entra
+     * a /login (RedirectIfAuthenticated, ver AppServiceProvider::boot()).
+     *
+     * Bug real que resuelve: /panel vive en routes/tenant.php, detrás de
+     * InitializeTenancyByAuthenticatedUser, que hace abort 403 si el
+     * usuario no tiene `comercio_id`. Un admin de plataforma provisionado
+     * con `admin:crear` NO tiene comercio (es el caso normal, ver ese
+     * comando), así que lograba loguearse y caía en un 403 en vez de
+     * llegar a algún lado usable.
+     *
+     * La condición es "admin Y sin comercio", no "admin": un admin de
+     * PyFsa que ADEMÁS es dueño de su propio comercio (caso legítimo y
+     * explícitamente soportado por admin:crear) sigue entrando a /panel
+     * como cualquier usuario, y llega al panel admin por el nav.
+     */
+    public function rutaDeInicio(): string
+    {
+        return $this->is_admin && blank($this->comercio_id)
+            ? route('admin.comercios.index')
+            : route('panel');
+    }
+
+    /**
      * The attributes that should be hidden for serialization.
      *
      * @var list<string>

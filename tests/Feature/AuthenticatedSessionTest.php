@@ -4,15 +4,26 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\Comercio;
 use App\Models\User;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Tests\Feature\Concerns\ProvisionaTenantConBaseReal;
 use Tests\TestCase;
 
 class AuthenticatedSessionTest extends TestCase
 {
+    use ProvisionaTenantConBaseReal;
     use RefreshDatabase;
+
+    protected function tearDown(): void
+    {
+        Comercio::all()->each->delete();
+        $this->borrarComerciosConBaseReal();
+
+        parent::tearDown();
+    }
 
     /**
      * Regresión: el middleware 'guest' (Illuminate\Auth\Middleware\
@@ -30,6 +41,74 @@ class AuthenticatedSessionTest extends TestCase
         $response = $this->actingAs($user)->get(route('login'));
 
         $response->assertRedirect(route('panel'));
+    }
+
+    /**
+     * El otro camino que también decidía "el home" a mano: el middleware
+     * 'guest' rebotando a alguien ya logueado que entra a /login. Sin esto
+     * mandaba a un admin sin comercio directo al 403 de /panel.
+     */
+    public function test_admin_sin_comercio_que_entra_a_login_es_redirigido_al_panel_admin(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true, 'comercio_id' => null]);
+
+        $this->actingAs($admin)->get(route('login'))
+            ->assertRedirect(route('admin.comercios.index'));
+    }
+
+    /**
+     * Bug real: /panel vive en routes/tenant.php, detrás de
+     * InitializeTenancyByAuthenticatedUser, que hace abort 403 si el
+     * usuario no tiene comercio_id. Un admin de plataforma provisionado con
+     * `admin:crear` NO tiene comercio (es el caso normal), así que se
+     * logueaba bien y se estrellaba contra un 403 sin llegar a ningún lado
+     * usable. Ahora aterriza en el panel admin, que es lo único que ese
+     * usuario puede usar.
+     */
+    public function test_admin_sin_comercio_aterriza_en_el_panel_admin_al_loguearse(): void
+    {
+        $admin = User::factory()->create([
+            'email' => 'admin-sin-comercio@pyfsa.test',
+            'is_admin' => true,
+            'comercio_id' => null,
+        ]);
+
+        $this->post('/login', [
+            'email' => 'admin-sin-comercio@pyfsa.test',
+            'password' => 'password',
+        ])->assertRedirect(route('admin.comercios.index'));
+
+        $this->assertAuthenticatedAs($admin);
+
+        // Y el destino es de verdad usable, no otro 403 encadenado.
+        $this->get(route('admin.comercios.index'))->assertOk();
+    }
+
+    /**
+     * Regresión del caso legítimo de al lado: un admin de PyFsa que ADEMÁS
+     * es dueño de su propio comercio (explícitamente soportado por
+     * admin:crear) no cambia de comportamiento — sigue entrando a /panel
+     * como cualquier usuario, y al panel admin llega por el nav.
+     *
+     * Acá no hace falta un comercio real: el redirect del login se decide
+     * solo con `comercio_id`/`is_admin`, sin tocar la base del tenant. Se
+     * verifica el destino, no que /panel cargue (eso ya lo cubre
+     * PanelTest, con un tenant real).
+     */
+    public function test_admin_con_comercio_sigue_yendo_al_panel_del_comercio(): void
+    {
+        $comercio = $this->crearComercioConBaseReal();
+
+        User::factory()->create([
+            'email' => 'admin-con-comercio@pyfsa.test',
+            'is_admin' => true,
+            'comercio_id' => $comercio->id,
+        ]);
+
+        $this->post('/login', [
+            'email' => 'admin-con-comercio@pyfsa.test',
+            'password' => 'password',
+        ])->assertRedirect(route('panel'));
     }
 
     public function test_usuario_no_autenticado_puede_ver_login(): void
