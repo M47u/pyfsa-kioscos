@@ -93,6 +93,7 @@
                                 @csrf
                                 <input
                                     type="number"
+                                    inputmode="numeric"
                                     name="cantidad"
                                     min="1"
                                     placeholder="Cant."

@@ -102,6 +102,26 @@ class ProductoTest extends TenantTestCase
         ]);
     }
 
+    /**
+     * inputmode="numeric" en el input de "Reponer" del listado: en mobile
+     * abre directo el teclado numérico en vez del QWERTY completo —
+     * type="number" solo no alcanza, en iOS a veces muestra el teclado con
+     * signo/decimal en vez del numérico puro.
+     */
+    public function test_input_de_reponer_stock_tiene_teclado_numerico(): void
+    {
+        Producto::create([
+            'nombre' => 'Yerba 1kg',
+            'codigo_barras' => null,
+            'precio_costo' => 1000,
+            'precio_venta' => 1500,
+            'stock_minimo' => 3,
+        ]);
+
+        $this->actingAs($this->user)->get(route('productos.index'))
+            ->assertSee('inputmode="numeric"', false);
+    }
+
     public function test_bajo_minimo_segun_stock_actual(): void
     {
         $producto = Producto::create([
