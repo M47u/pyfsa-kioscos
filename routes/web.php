@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AuditoriaController;
 use App\Http\Controllers\Admin\ComercioController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Middleware\EnsureUserIsAdmin;
@@ -42,4 +43,9 @@ Route::middleware(['auth', EnsureUserIsAdmin::class])
         Route::get('comercios/create', [ComercioController::class, 'create'])->name('comercios.create');
         Route::post('comercios', [ComercioController::class, 'store'])->name('comercios.store');
         Route::put('comercios/{comercio}', [ComercioController::class, 'update'])->name('comercios.update');
+
+        // Solo lectura: el rastro de acciones admin no se crea ni se edita
+        // desde la web (ver RegistroAuditoria::registrar(), que lo escriben
+        // los propios controllers al ejecutar la acción auditada).
+        Route::get('auditoria', [AuditoriaController::class, 'index'])->name('auditoria.index');
     });

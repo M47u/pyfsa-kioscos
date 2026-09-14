@@ -4,12 +4,21 @@
      hay un comercio en contexto, sería mostrar links a nada. --}}
 <nav class="border-b border-[#19140035] dark:border-[#3E3E3A]">
     <div class="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between text-sm">
-        <a
-            href="{{ route('admin.comercios.index') }}"
-            class="font-medium {{ request()->routeIs('admin.comercios.*') ? 'underline' : '' }}"
-        >
-            Comercios
-        </a>
+        <div class="flex items-center gap-6">
+            <a
+                href="{{ route('admin.comercios.index') }}"
+                class="font-medium {{ request()->routeIs('admin.comercios.*') ? 'underline' : '' }}"
+            >
+                Comercios
+            </a>
+
+            <a
+                href="{{ route('admin.auditoria.index') }}"
+                class="font-medium {{ request()->routeIs('admin.auditoria.*') ? 'underline' : '' }}"
+            >
+                Auditoría
+            </a>
+        </div>
 
         <form method="POST" action="{{ route('logout') }}">
             @csrf

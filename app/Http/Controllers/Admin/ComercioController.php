@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ComercioCreateRequest;
 use App\Http\Requests\Admin\ComercioEstadoRequest;
 use App\Models\Comercio;
+use App\Models\RegistroAuditoria;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
@@ -45,7 +46,21 @@ class ComercioController extends Controller
 
     public function update(ComercioEstadoRequest $request, Comercio $comercio): RedirectResponse
     {
+        // Leído ANTES del update: después ya no hay forma de saber de dónde
+        // venía, y "de vencida a activa" es justamente el dato que hace
+        // útil al registro (ver RegistroAuditoria).
+        $estadoAnterior = $comercio->estado_suscripcion;
+
         $comercio->update($request->validated());
+
+        RegistroAuditoria::registrar(
+            RegistroAuditoria::ACCION_COMERCIO_ESTADO_ACTUALIZADO,
+            $comercio->id,
+            [
+                'estado_anterior' => $estadoAnterior,
+                'estado_nuevo' => $comercio->estado_suscripcion,
+            ],
+        );
 
         return redirect()->route('admin.comercios.index')->with('status', "Comercio {$comercio->id} actualizado.");
     }
@@ -82,13 +97,28 @@ class ComercioController extends Controller
         $comercio->asignarBaseDeDatos($request->validated('nombre_base'));
         $comercio->save();
 
-        User::create([
+        $dueno = User::create([
             'name' => $request->validated('name'),
             'email' => $request->validated('email'),
             'password' => $request->validated('password'),
             'comercio_id' => $comercio->id,
             'rol' => User::ROL_DUENO,
         ]);
+
+        // Después del User::create() a propósito: si esa línea falla, el
+        // alta quedó a medias (ver el docblock de arriba) y no corresponde
+        // registrarla como un comercio creado. `detalles` guarda el email
+        // del dueño y el nombre de la base porque son los dos datos que no
+        // se pueden reconstruir después si el comercio termina borrado.
+        RegistroAuditoria::registrar(
+            RegistroAuditoria::ACCION_COMERCIO_CREADO,
+            $comercio->id,
+            [
+                'nombre_comercio' => $comercio->nombre,
+                'nombre_base' => $request->validated('nombre_base'),
+                'email_dueno' => $dueno->email,
+            ],
+        );
 
         return redirect()->route('admin.comercios.index')
             ->with('status', "Comercio \"{$comercio->nombre}\" creado correctamente.");
