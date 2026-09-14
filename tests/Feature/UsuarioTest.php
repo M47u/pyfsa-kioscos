@@ -101,7 +101,7 @@ class UsuarioTest extends TenantTestCase
      */
     public function test_dueno_no_puede_restablecer_la_contrasena_de_un_usuario_de_otro_comercio(): void
     {
-        $otroComercio = Comercio::create();
+        $otroComercio = $this->crearComercioConBaseReal();
         $usuarioDeOtroComercio = User::factory()->create([
             'comercio_id' => $otroComercio->id,
             'rol' => User::ROL_EMPLEADO,
@@ -196,7 +196,7 @@ class UsuarioTest extends TenantTestCase
 
     public function test_dueno_no_puede_eliminar_un_usuario_de_otro_comercio(): void
     {
-        $otroComercio = Comercio::create();
+        $otroComercio = $this->crearComercioConBaseReal();
         $usuarioDeOtroComercio = User::factory()->create([
             'comercio_id' => $otroComercio->id,
             'rol' => User::ROL_EMPLEADO,
