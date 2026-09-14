@@ -30,6 +30,11 @@ class PagoRequest extends FormRequest
             // la validación y explota como un error crudo de MySQL al
             // insertar.
             'monto' => ['required', 'numeric', 'min:0.01', 'max:99999999.99'],
+            // Offline (ver VentaRequest::rules() por el mismo criterio y
+            // CLAUDE.md, arquitectura offline): lo genera siempre el
+            // frontend, sin 'unique' a propósito — un uuid repetido es un
+            // sync repetido, no un error (ver ClienteController::registrarPago).
+            'uuid_dispositivo' => ['nullable', 'string', 'uuid'],
         ];
     }
 }

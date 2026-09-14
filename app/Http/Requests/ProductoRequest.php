@@ -32,26 +32,43 @@ class ProductoRequest extends FormRequest
         if ($this->input('stock_minimo') === null) {
             $this->merge(['stock_minimo' => 0]);
         }
+
+        if ($this->input('stock_inicial') === null) {
+            $this->merge(['stock_inicial' => 0]);
+        }
+    }
+
+    public function rules(): array
+    {
+        return self::reglas($this->route('producto'));
     }
 
     /**
+     * Reglas de validación de un Producto, factorizadas como método estático
+     * para que ProductoImportController (alta masiva por CSV) las reuse
+     * fila por fila en vez de duplicarlas — ahí no hay un {producto} de
+     * ruta para ignorar en la unicidad de codigo_barras (siempre es alta
+     * nueva), de ahí el parámetro opcional en vez de leerlo de la request.
+     *
      * @return array<string, mixed>
      */
-    public function rules(): array
+    public static function reglas(mixed $productoAIgnorar = null): array
     {
-        $producto = $this->route('producto');
-
         return [
             'nombre' => ['required', 'string', 'max:255'],
             'codigo_barras' => [
                 'nullable',
                 'string',
                 'max:255',
-                Rule::unique('productos', 'codigo_barras')->ignore($producto),
+                Rule::unique('productos', 'codigo_barras')->ignore($productoAIgnorar),
             ],
             'precio_costo' => ['required', 'numeric', 'min:0'],
             'precio_venta' => ['required', 'numeric', 'min:0'],
             'stock_minimo' => ['nullable', 'integer', 'min:0'],
+            // Solo se usa en el alta (ver ProductoController::store). No es
+            // columna de `productos` — genera un MovimientoStock de
+            // reposición, porque el stock nunca se guarda directo.
+            'stock_inicial' => ['nullable', 'integer', 'min:0'],
         ];
     }
 }

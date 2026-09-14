@@ -63,4 +63,23 @@ class ClienteTest extends TenantTestCase
         $response->assertSee('Juan Pérez');
         $response->assertSee('superó su límite de crédito');
     }
+
+    /**
+     * Regresión de markup: el botón de "Registrar pago" no debe volver a
+     * ser type="submit" directo, y el modal de confirmación (con sus
+     * botones de confirmar/cancelar) tiene que estar en la página — es lo
+     * único que impide mandar un pago sin confirmar (ver
+     * resources/views/components/confirm-dialog.blade.php).
+     */
+    public function test_show_de_cliente_incluye_modal_de_confirmacion_de_pago(): void
+    {
+        $cliente = Cliente::create(['nombre' => 'Juan Pérez', 'telefono' => null, 'limite_credito' => 1000]);
+
+        $response = $this->actingAs($this->user)->get(route('clientes.show', $cliente));
+
+        $response->assertOk();
+        $response->assertSee('id="abrir-confirmar-pago"', false);
+        $response->assertSee('id="confirmar-pago-dialog"', false);
+        $response->assertSee('id="confirmar-pago-dialog-confirmar"', false);
+    }
 }

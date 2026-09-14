@@ -233,4 +233,111 @@ class VentaTest extends TenantTestCase
             $segundaConexion->rollBack();
         }
     }
+
+    /**
+     * Offline (ver CLAUDE.md, arquitectura offline): una venta que llega con
+     * uuid_dispositivo se crea normal, igual que una venta online sin uuid.
+     */
+    public function test_venta_con_uuid_dispositivo_nuevo_se_crea_normal(): void
+    {
+        $producto = $this->crearProducto();
+
+        $response = $this->actingAs($this->user)->post(route('ventas.store'), [
+            'medio_pago' => 'efectivo',
+            'uuid_dispositivo' => '11111111-1111-4111-8111-111111111111',
+            'items' => [
+                ['producto_id' => $producto->id, 'cantidad' => 3],
+            ],
+        ]);
+
+        $response->assertRedirect(route('ventas.index'));
+        $this->assertDatabaseHas('ventas', [
+            'uuid_dispositivo' => '11111111-1111-4111-8111-111111111111',
+            'sincronizada_con_stock_insuficiente' => false,
+        ]);
+        $this->assertSame(1, Venta::count());
+    }
+
+    /**
+     * Idempotencia (ver CLAUDE.md, arquitectura offline): reintentar la
+     * MISMA venta (mismo uuid_dispositivo) — red flaky, doble intento de
+     * sync — no crea una segunda Venta. Responde como éxito igual, no como
+     * error, porque no es un fallo: es un sync repetido.
+     */
+    public function test_venta_con_mismo_uuid_dispositivo_no_duplica_y_responde_exito(): void
+    {
+        $producto = $this->crearProducto(); // stock inicial: 20
+        $uuid = '22222222-2222-4222-8222-222222222222';
+
+        $payload = [
+            'medio_pago' => 'efectivo',
+            'uuid_dispositivo' => $uuid,
+            'items' => [
+                ['producto_id' => $producto->id, 'cantidad' => 3],
+            ],
+        ];
+
+        $primeraRespuesta = $this->actingAs($this->user)->post(route('ventas.store'), $payload);
+        $segundaRespuesta = $this->actingAs($this->user)->post(route('ventas.store'), $payload);
+
+        $primeraRespuesta->assertRedirect(route('ventas.index'));
+        $segundaRespuesta->assertRedirect(route('ventas.index'));
+        $segundaRespuesta->assertSessionHasNoErrors();
+
+        $this->assertSame(1, Venta::where('uuid_dispositivo', $uuid)->count());
+        $this->assertSame(17, $producto->fresh()->stockActual());
+    }
+
+    /**
+     * Decisión de negocio confirmada (ver CLAUDE.md, arquitectura offline):
+     * una venta offline no pudo validar el stock contra el servidor en el
+     * momento real (el cliente ya se fue con el producto en mano) — se
+     * crea igual aunque deje stock negativo, marcada
+     * sincronizada_con_stock_insuficiente, a diferencia de una venta online
+     * equivalente (sin uuid_dispositivo, ver el test de regresión de abajo).
+     */
+    public function test_venta_offline_que_deja_stock_negativo_se_crea_marcada(): void
+    {
+        $producto = $this->crearProducto(); // stock inicial: 20
+
+        $response = $this->actingAs($this->user)->post(route('ventas.store'), [
+            'medio_pago' => 'efectivo',
+            'uuid_dispositivo' => '33333333-3333-4333-8333-333333333333',
+            'items' => [
+                ['producto_id' => $producto->id, 'cantidad' => 25],
+            ],
+        ]);
+
+        $response->assertRedirect(route('ventas.index'));
+        $response->assertSessionHasNoErrors();
+
+        $this->assertSame(1, Venta::count());
+        $this->assertDatabaseHas('ventas', [
+            'uuid_dispositivo' => '33333333-3333-4333-8333-333333333333',
+            'sincronizada_con_stock_insuficiente' => true,
+        ]);
+        $this->assertSame(-5, $producto->fresh()->stockActual());
+    }
+
+    /**
+     * Regresión: una venta SIN uuid_dispositivo (venta online normal) sigue
+     * bloqueada si deja stock negativo — el comportamiento existente
+     * (test_venta_que_pide_mas_stock_del_disponible_se_rechaza_y_no_crea_nada)
+     * no cambia en nada por la existencia del flujo offline.
+     */
+    public function test_venta_sin_uuid_dispositivo_que_deja_stock_negativo_sigue_bloqueada(): void
+    {
+        $producto = $this->crearProducto(); // stock inicial: 20
+
+        $response = $this->actingAs($this->user)->post(route('ventas.store'), [
+            'medio_pago' => 'efectivo',
+            'items' => [
+                ['producto_id' => $producto->id, 'cantidad' => 25],
+            ],
+        ]);
+
+        $response->assertSessionHasErrors('items');
+        $this->assertSame(0, Venta::count());
+        $this->assertSame(20, $producto->fresh()->stockActual());
+    }
 }

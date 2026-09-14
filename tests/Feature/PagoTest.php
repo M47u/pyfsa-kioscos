@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Models\Cliente;
 use App\Models\MovimientoStock;
+use App\Models\Pago;
 use App\Models\Producto;
 use App\Models\Venta;
 
@@ -164,5 +165,29 @@ class PagoTest extends TenantTestCase
             'cliente_id' => $cliente->id,
             'monto' => 100.00,
         ]);
+    }
+
+    /**
+     * Idempotencia offline (ver CLAUDE.md, arquitectura offline): mismo
+     * criterio que VentaTest — reintentar el MISMO pago (mismo
+     * uuid_dispositivo) no duplica el Pago, responde como éxito igual.
+     */
+    public function test_pago_con_mismo_uuid_dispositivo_no_duplica_y_responde_exito(): void
+    {
+        $cliente = Cliente::create(['nombre' => 'Juan Pérez', 'telefono' => null, 'limite_credito' => 5000]);
+        Venta::create(['cliente_id' => $cliente->id, 'user_id' => $this->user->id, 'medio_pago' => Venta::MEDIO_PAGO_FIADO, 'total' => 1000]);
+
+        $uuid = '44444444-4444-4444-8444-444444444444';
+        $payload = ['monto' => 400, 'uuid_dispositivo' => $uuid];
+
+        $primeraRespuesta = $this->actingAs($this->user)->post(route('clientes.pagos.store', $cliente), $payload);
+        $segundaRespuesta = $this->actingAs($this->user)->post(route('clientes.pagos.store', $cliente), $payload);
+
+        $primeraRespuesta->assertRedirect(route('clientes.show', $cliente));
+        $segundaRespuesta->assertRedirect(route('clientes.show', $cliente));
+        $segundaRespuesta->assertSessionHasNoErrors();
+
+        $this->assertSame(1, Pago::where('uuid_dispositivo', $uuid)->count());
+        $this->assertSame(600.0, $cliente->fresh()->saldo());
     }
 }
