@@ -23,9 +23,20 @@ class TenancyServiceProvider extends ServiceProvider
         return [
             // Tenant events
             Events\CreatingTenant::class => [],
+            // Sin Jobs\CreateDatabase (ver CLAUDE.md, decisión de
+            // arquitectura "sin CREATE DATABASE en la app"): el hosting
+            // compartido donde se despliega esto no le da al usuario de
+            // MySQL permiso para crear bases — las bases se crean a mano
+            // en el panel del hosting, ANTES de dar de alta el comercio
+            // desde /admin/comercios/create (ver Admin\ComercioController).
+            // Jobs\MigrateDatabase se queda: corre las migraciones de
+            // tenant contra la base ya existente, no depende de que
+            // CreateDatabase haya corrido antes en el mismo pipeline
+            // (verificado leyendo vendor/stancl/tenancy/src/Jobs/
+            // MigrateDatabase.php — solo hace Artisan::call('tenants:migrate',
+            // ['--tenants' => [...]])).
             Events\TenantCreated::class => [
                 JobPipeline::make([
-                    Jobs\CreateDatabase::class,
                     Jobs\MigrateDatabase::class,
                     // Jobs\SeedDatabase::class,
 
@@ -41,13 +52,16 @@ class TenancyServiceProvider extends ServiceProvider
             Events\UpdatingTenant::class => [],
             Events\TenantUpdated::class => [],
             Events\DeletingTenant::class => [],
-            Events\TenantDeleted::class => [
-                JobPipeline::make([
-                    Jobs\DeleteDatabase::class,
-                ])->send(function (Events\TenantDeleted $event) {
-                    return $event->tenant;
-                })->shouldBeQueued(false), // `false` by default, but you probably want to make this `true` for production.
-            ],
+            // Sin Jobs\DeleteDatabase, mismo motivo que arriba: la base la
+            // crea PyFsa a mano, así que también se borra a mano — la app
+            // no tiene permiso de DROP DATABASE en el hosting real, y
+            // aunque lo tuviera, borrar la base de un comercio real sin
+            // que alguien lo decida a propósito (fuera de este pipeline
+            // automático) es un riesgo que no vale la pena correr.
+            // Comercio::delete() ahora solo borra la fila central — la
+            // base del tenant queda intacta, hay que eliminarla a mano
+            // desde el panel del hosting si corresponde.
+            Events\TenantDeleted::class => [],
 
             // Domain events
             Events\CreatingDomain::class => [],
