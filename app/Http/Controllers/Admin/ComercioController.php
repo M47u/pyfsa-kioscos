@@ -10,6 +10,7 @@ use App\Http\Requests\Admin\ComercioEstadoRequest;
 use App\Models\Comercio;
 use App\Models\RegistroAuditoria;
 use App\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
@@ -44,12 +45,21 @@ class ComercioController extends Controller
         ]);
     }
 
+    /**
+     * Este formulario persiste DOS campos (ver ComercioEstadoRequest):
+     * `estado_suscripcion` y `trial_termina_el`. Los dos se auditan — con
+     * solo el estado, extender el trial de un comercio sin cambiarle el
+     * estado dejaba una fila de auditoría que decía literalmente "no
+     * cambió nada" cuando sí había cambiado, que es peor que no auditar
+     * (un log que miente es un log en el que no se puede confiar).
+     */
     public function update(ComercioEstadoRequest $request, Comercio $comercio): RedirectResponse
     {
-        // Leído ANTES del update: después ya no hay forma de saber de dónde
-        // venía, y "de vencida a activa" es justamente el dato que hace
-        // útil al registro (ver RegistroAuditoria).
+        // Leídos ANTES del update: después ya no hay forma de saber de
+        // dónde venían, y "de vencida a activa" (o "el trial se corrió dos
+        // semanas") es justamente el dato que hace útil al registro.
         $estadoAnterior = $comercio->estado_suscripcion;
+        $trialAnterior = self::fechaLegible($comercio->trial_termina_el);
 
         $comercio->update($request->validated());
 
@@ -59,10 +69,29 @@ class ComercioController extends Controller
             [
                 'estado_anterior' => $estadoAnterior,
                 'estado_nuevo' => $comercio->estado_suscripcion,
+                'trial_termina_el_anterior' => $trialAnterior,
+                'trial_termina_el_nuevo' => self::fechaLegible($comercio->trial_termina_el),
             ],
         );
 
         return redirect()->route('admin.comercios.index')->with('status', "Comercio {$comercio->id} actualizado.");
+    }
+
+    /**
+     * `trial_termina_el` tiene cast 'date' (ver Comercio::casts()), así que
+     * llega como Carbon — que dentro del JSON `detalles` se serializaría
+     * como un objeto entero con timezone y demás ruido. Se guarda la fecha
+     * plana, que es lo único que importa para leer el historial después.
+     * Se banca también un string crudo por si el cast no llegó a aplicarse
+     * (el atributo puede venir recién asignado desde el request).
+     */
+    private static function fechaLegible(mixed $valor): ?string
+    {
+        if ($valor === null) {
+            return null;
+        }
+
+        return $valor instanceof CarbonInterface ? $valor->toDateString() : (string) $valor;
     }
 
     public function create(): View

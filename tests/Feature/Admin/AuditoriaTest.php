@@ -94,6 +94,36 @@ class AuditoriaTest extends TestCase
     }
 
     /**
+     * El formulario persiste DOS campos (ComercioEstadoRequest valida
+     * `estado_suscripcion` y `trial_termina_el`). Extender un trial sin
+     * tocar el estado es una acción real y frecuente — "te doy dos semanas
+     * más" —, y con solo el estado auditado la fila decía literalmente "de
+     * prueba a prueba": un registro que afirma que no cambió nada cuando
+     * sí cambió algo.
+     */
+    public function test_cambiar_solo_el_trial_deja_un_registro_que_refleja_ese_cambio(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $comercio = $this->crearComercioConBaseReal([
+            'estado_suscripcion' => Comercio::ESTADO_PRUEBA,
+            'trial_termina_el' => '2026-09-20',
+        ]);
+
+        $this->actingAs($admin)->put(route('admin.comercios.update', $comercio), [
+            // Mismo estado a propósito: lo único que cambia es la fecha.
+            'estado_suscripcion' => Comercio::ESTADO_PRUEBA,
+            'trial_termina_el' => '2026-10-04',
+        ])->assertRedirect(route('admin.comercios.index'));
+
+        $registro = RegistroAuditoria::sole();
+
+        $this->assertSame(Comercio::ESTADO_PRUEBA, $registro->detalles['estado_anterior']);
+        $this->assertSame(Comercio::ESTADO_PRUEBA, $registro->detalles['estado_nuevo']);
+        $this->assertSame('2026-09-20', $registro->detalles['trial_termina_el_anterior']);
+        $this->assertSame('2026-10-04', $registro->detalles['trial_termina_el_nuevo']);
+    }
+
+    /**
      * Una acción rechazada por el gate no tiene que dejar rastro de nada:
      * no pasó.
      */
