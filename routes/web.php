@@ -17,7 +17,14 @@ Route::get('/', function () {
 // Admin\ComercioController).
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
-    Route::post('/login', [AuthenticatedSessionController::class, 'store']);
+
+    // Dos límites que se suman, a propósito: LoginRequest cuenta los
+    // intentos fallidos por email+IP (frena la fuerza bruta contra UNA
+    // cuenta) y este limiter cuenta las requests por IP sola (frena el
+    // credential stuffing: una contraseña contra miles de emails desde la
+    // misma IP, que el primero no ve). Ver AppServiceProvider::boot().
+    Route::post('/login', [AuthenticatedSessionController::class, 'store'])
+        ->middleware('throttle:login-por-ip');
 });
 
 Route::middleware('auth')->group(function () {

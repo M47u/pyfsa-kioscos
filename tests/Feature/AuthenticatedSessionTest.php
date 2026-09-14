@@ -128,6 +128,32 @@ class AuthenticatedSessionTest extends TestCase
     }
 
     /**
+     * El hueco que el límite por email+IP NO cubría: credential stuffing.
+     * Un atacante desde UNA sola IP probando una contraseña contra miles de
+     * emails distintos nunca chocaba con el límite de LoginRequest, porque
+     * cada email arranca su propio contador en cero. El limiter con nombre
+     * 'login-por-ip' (ver AppServiceProvider) cuenta por IP sola.
+     *
+     * Los emails de este test son todos DISTINTOS a propósito: si
+     * colisionaran con el throttle de email+IP, el 429 podría venir del
+     * límite viejo y el test no probaría nada nuevo.
+     */
+    public function test_veintiun_intentos_desde_la_misma_ip_con_emails_distintos_devuelven_429(): void
+    {
+        for ($intento = 1; $intento <= 20; $intento++) {
+            $this->post('/login', [
+                'email' => "objetivo-{$intento}@example.com",
+                'password' => 'password',
+            ])->assertStatus(302);
+        }
+
+        $this->post('/login', [
+            'email' => 'objetivo-21@example.com',
+            'password' => 'password',
+        ])->assertStatus(429);
+    }
+
+    /**
      * El bloqueo dispara Lockout — es el hook que deja la puerta abierta a
      * notificar/alertar más adelante sin tocar LoginRequest.
      */
