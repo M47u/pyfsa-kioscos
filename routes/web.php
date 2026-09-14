@@ -40,5 +40,7 @@ Route::middleware(['auth', EnsureUserIsAdmin::class])
     ->name('admin.')
     ->group(function () {
         Route::get('comercios', [ComercioController::class, 'index'])->name('comercios.index');
+        Route::get('comercios/create', [ComercioController::class, 'create'])->name('comercios.create');
+        Route::post('comercios', [ComercioController::class, 'store'])->name('comercios.store');
         Route::put('comercios/{comercio}', [ComercioController::class, 'update'])->name('comercios.update');
     });

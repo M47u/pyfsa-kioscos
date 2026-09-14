@@ -3,7 +3,15 @@
 @section('title', 'Comercios')
 
 @section('content')
-    <h1 class="text-lg font-medium mb-6">Comercios</h1>
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-lg font-medium">Comercios</h1>
+        <a
+            href="{{ route('admin.comercios.create') }}"
+            class="rounded-sm bg-[#1b1b18] dark:bg-[#eeeeec] text-white dark:text-[#1C1C1A] px-4 py-2 text-sm font-medium"
+        >
+            Nuevo comercio
+        </a>
+    </div>
 
     <x-status-banner />
     <x-validation-errors />
