@@ -124,6 +124,75 @@ class AuditoriaTest extends TestCase
     }
 
     /**
+     * Para investigar una cuenta admin comprometida, DE DÓNDE vino la
+     * acción importa tanto como quién la hizo.
+     *
+     * Confirmado en vez de asumido: las requests de test se arman con
+     * Symfony\Component\HttpFoundation\Request::create(), que por default
+     * setea REMOTE_ADDR = 127.0.0.1 y HTTP_USER_AGENT = 'Symfony' (ver
+     * vendor/symfony/http-foundation/Request.php), así que el camino HTTP
+     * queda cubierto de verdad.
+     */
+    public function test_el_registro_guarda_ip_y_user_agent_de_la_request(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $nombreBase = $this->crearBaseDeDatosSuelta();
+
+        $this->actingAs($admin)->post(route('admin.comercios.store'), [
+            'nombre_comercio' => 'Kiosco Con Origen',
+            'nombre_base' => $nombreBase,
+            'name' => 'Dueño Con Origen',
+            'email' => 'con-origen@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ])->assertRedirect(route('admin.comercios.index'));
+
+        $registro = RegistroAuditoria::sole();
+
+        $this->assertNotNull($registro->ip);
+        $this->assertNotNull($registro->user_agent);
+        $this->assertSame('127.0.0.1', $registro->ip);
+    }
+
+    /**
+     * La contracara documentada del test de arriba: una acción de consola
+     * (admin:crear) no tiene request HTTP, así que ip/user_agent quedan
+     * NULL. Es el comportamiento esperado, no un agujero — vale un test
+     * para que nadie "arregle" después algo que está bien así.
+     */
+    public function test_una_accion_de_consola_deja_ip_y_user_agent_nulos(): void
+    {
+        $this->artisan('admin:crear', [
+            'email' => 'consola@pyfsa.test',
+            '--nombre' => 'Admin De Consola',
+            '--password' => 'secreto-largo-123',
+        ])->assertSuccessful();
+
+        $registro = RegistroAuditoria::sole();
+
+        $this->assertNull($registro->ip);
+        $this->assertNull($registro->user_agent);
+    }
+
+    /**
+     * El origen tiene que llegar a la pantalla, no solo a la base.
+     */
+    public function test_el_listado_muestra_la_ip_de_cada_accion(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $comercio = $this->crearComercioConBaseReal();
+
+        $this->actingAs($admin)->put(route('admin.comercios.update', $comercio), [
+            'estado_suscripcion' => Comercio::ESTADO_ACTIVA,
+            'trial_termina_el' => null,
+        ]);
+
+        $this->actingAs($admin)->get(route('admin.auditoria.index'))
+            ->assertOk()
+            ->assertSee('127.0.0.1');
+    }
+
+    /**
      * Una acción rechazada por el gate no tiene que dejar rastro de nada:
      * no pasó.
      */

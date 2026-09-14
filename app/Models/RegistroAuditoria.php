@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 use Stancl\Tenancy\Database\Concerns\CentralConnection;
 
 /**
@@ -78,6 +79,8 @@ class RegistroAuditoria extends Model
         'accion',
         'comercio_id',
         'detalles',
+        'ip',
+        'user_agent',
     ];
 
     protected function casts(): array
@@ -89,20 +92,59 @@ class RegistroAuditoria extends Model
     }
 
     /**
-     * Punto de entrada único desde los controllers — resuelve solo el
-     * "quién" (el admin autenticado) para que ningún call site se olvide
-     * de pasarlo. `user_id` queda nullable porque esto puede correr sin
-     * sesión (un comando artisan futuro, por ejemplo).
+     * Punto de entrada único desde los controllers y comandos — resuelve
+     * solo el "quién" (el admin autenticado) y el "de dónde" (IP +
+     * user-agent) para que ningún call site se olvide de pasarlos.
+     *
+     * Los tres quedan nullable y en NULL cuando esto corre desde consola
+     * (CrearAdminCommand): no hay sesión de la cual sacar el usuario ni
+     * request HTTP de la cual sacar la IP. Es esperado, no un bug — el
+     * quién/de dónde de una acción de consola es el acceso al servidor,
+     * que se audita fuera de esta app.
+     *
+     * DOS FORMAS DE DETECTAR "esto no es una request HTTP" que NO sirven,
+     * las dos verificadas contra el framework, no supuestas:
+     *
+     * 1. Confiar en que en consola `request()` viene vacía. No viene: el
+     *    kernel de consola bootea SetRequestForConsole (ver
+     *    vendor/laravel/framework/.../Bootstrap/SetRequestForConsole.php),
+     *    que arma una Request FALSA con `Request::create(config('app.url'))`
+     *    — y Symfony rellena ahí REMOTE_ADDR = 127.0.0.1 y
+     *    HTTP_USER_AGENT = 'Symfony' por default. Sin este guard, cada
+     *    `php artisan admin:crear` en producción dejaría un registro que
+     *    dice que la acción vino de 127.0.0.1 con un navegador llamado
+     *    "Symfony": un log que miente, peor que un log vacío.
+     * 2. app()->runningInConsole(). Mira \PHP_SAPI, así que bajo PHPUnit
+     *    devuelve true SIEMPRE — también en los tests que sí pegan por
+     *    HTTP. Gatear con eso apagaría la captura justo donde hay que
+     *    probarla, y el bug volvería sin que ningún test se entere.
+     *
+     * Lo que sí distingue los dos casos es si hay una RUTA siendo
+     * atendida: la request falsa de consola nunca pasa por el router, así
+     * que `route()` es null; cualquier acción admin auditada llega desde
+     * un controller, o sea con ruta resuelta, en producción y en tests por
+     * igual.
      *
      * @param  array<string, mixed>  $detalles
      */
     public static function registrar(string $accion, ?string $comercioId = null, array $detalles = []): self
     {
+        $request = request();
+        $esHttpReal = $request->route() !== null;
+
         return self::create([
             'user_id' => auth()->id(),
             'accion' => $accion,
             'comercio_id' => $comercioId,
             'detalles' => $detalles === [] ? null : $detalles,
+            'ip' => $esHttpReal ? $request->ip() : null,
+            // Un user-agent falsificado puede venir de cualquier largo: se
+            // recorta al de la columna para que un header gigante no tire
+            // abajo la escritura del registro (perder el rastro entero por
+            // no poder guardar un dato accesorio sería el peor final).
+            'user_agent' => $esHttpReal
+                ? (Str::limit((string) $request->userAgent(), 511, '') ?: null)
+                : null,
         ]);
     }
 

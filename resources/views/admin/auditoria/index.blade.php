@@ -18,6 +18,7 @@
                     <th class="py-2 pr-4">Quién</th>
                     <th class="py-2 pr-4">Acción</th>
                     <th class="py-2 pr-4">Comercio</th>
+                    <th class="py-2 pr-4">Origen</th>
                     <th class="py-2">Detalle</th>
                 </tr>
             </thead>
@@ -51,6 +52,19 @@
                             @endif
                             <span class="block font-mono text-xs opacity-70">{{ $registro->comercio_id }}</span>
                         </td>
+                        <td class="py-2 pr-4 text-xs">
+                            {{-- Vacío en las acciones de consola (admin:crear):
+                                 no hay request HTTP de la cual sacar el dato.
+                                 Ver RegistroAuditoria::registrar(). --}}
+                            <span class="block font-mono whitespace-nowrap">{{ $registro->ip ?? '—' }}</span>
+                            @if ($registro->user_agent)
+                                {{-- El user-agent completo va en el title: es
+                                     largo, ruidoso y casi nunca lo que se está
+                                     mirando, pero hace falta entero cuando sí. --}}
+                                <span class="block max-w-[14rem] truncate opacity-70"
+                                      title="{{ $registro->user_agent }}">{{ $registro->user_agent }}</span>
+                            @endif
+                        </td>
                         <td class="py-2 text-xs">
                             @forelse ($registro->detalles ?? [] as $clave => $valor)
                                 <span class="block">
@@ -72,7 +86,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="5" class="py-4 text-center text-sm opacity-70">
+                        <td colspan="6" class="py-4 text-center text-sm opacity-70">
                             Todavía no hay acciones registradas.
                         </td>
                     </tr>
