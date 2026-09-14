@@ -70,6 +70,41 @@ class Comercio extends BaseTenant implements TenantWithDatabase
     }
 
     /**
+     * Asigna la base de datos YA CREADA a mano en el panel del hosting a
+     * este comercio (ver CLAUDE.md, decisión "sin CREATE DATABASE en la
+     * app" — la app ya no ejecuta Jobs\CreateDatabase, ver
+     * TenancyServiceProvider). Se llama ANTES de guardar un Comercio
+     * nuevo, desde Admin\ComercioController::store().
+     *
+     * Cómo lo resuelve stancl/tenancy (verificado en
+     * vendor/stancl/tenancy/src/DatabaseConfig.php::getName()): devuelve
+     * `$this->tenant->getInternal('db_name')` si ya está seteado, y recién
+     * si es null genera un nombre con prefijo+id (lo que pasaba antes acá,
+     * vía Jobs\CreateDatabase::handle() -> database()->makeCredentials()).
+     * setInternal()/getInternal() (Stancl\Tenancy\Database\Concerns\
+     * HasInternalKeys) leen/escriben el atributo `tenancy_db_name` con los
+     * getters/setters normales de Eloquent — es la API pública del
+     * paquete para esto, no un atajo interno.
+     *
+     * El nombre real NO lo elige la app: los hostings compartidos suelen
+     * prefijar el nombre de la base con el identificador de la cuenta
+     * (ej. `cpanelUser_kiosco1`), así que viene tal cual del formulario de
+     * alta — la validación de formato vive en
+     * Admin\ComercioCreateRequest, no acá.
+     *
+     * NO hace falta agregar `tenancy_db_name` a getCustomColumns(): no es
+     * una columna real de `tenants` (a diferencia de `estado_suscripcion`/
+     * `trial_termina_el`), así que VirtualColumn la guarda en el JSON
+     * `data` como cualquier atributo no declarado ahí — mismo caso que
+     * `nombre`/`timezone` (ver esos comentarios más abajo), no el caso de
+     * `estado_suscripcion`.
+     */
+    public function asignarBaseDeDatos(string $nombreBase): static
+    {
+        return $this->setInternal('db_name', $nombreBase);
+    }
+
+    /**
      * Únicas zonas horarias que un comercio puede elegir — es literalmente
      * el mercado objetivo (Formosa, Argentina + Alberdi, Paraguay; ver
      * documento de alcance, sección 04). Un <select> con los ~600 husos de
