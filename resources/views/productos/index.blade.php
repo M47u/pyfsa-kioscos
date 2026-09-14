@@ -89,7 +89,18 @@
                         </td>
                         <td class="py-2 pr-4">{{ $producto->stock_minimo }}</td>
                         <td class="py-2 pr-4">
-                            <form method="POST" action="{{ route('productos.reponer', $producto) }}" class="flex gap-1">
+                            {{-- El submit se intercepta en JS (ver el modal
+                                 compartido al final de la vista) para pedir
+                                 confirmación antes de reponer — data-nombre
+                                 es lo único que este form necesita exponerle
+                                 al script, la cantidad la lee directo del
+                                 input en el momento del submit. --}}
+                            <form
+                                method="POST"
+                                action="{{ route('productos.reponer', $producto) }}"
+                                class="reponer-form flex gap-1"
+                                data-nombre="{{ $producto->nombre }}"
+                            >
                                 @csrf
                                 <input
                                     type="number"
@@ -122,4 +133,56 @@
             </tbody>
         </table>
     </div>
+
+    {{-- Un solo modal compartido por todas las filas — mismo patrón que
+         "Eliminar" en usuarios/index.blade.php: cada form de reponer
+         intercepta su propio submit, y recién al confirmar lo manda de
+         verdad. --}}
+    <x-confirm-dialog
+        id="confirmar-reponer-dialog"
+        titulo="¿Reponer stock?"
+        confirmar-label="Sí, reponer"
+        cancelar-label="Cancelar"
+    >
+        Vas a sumar <strong><span id="cantidad-a-reponer"></span> unidad(es)</strong> al stock de
+        <strong><span id="nombre-articulo-a-reponer"></span></strong>.
+    </x-confirm-dialog>
+
+    <script>
+        (function () {
+            const dialog = document.getElementById('confirmar-reponer-dialog');
+            const nombreSpan = document.getElementById('nombre-articulo-a-reponer');
+            const cantidadSpan = document.getElementById('cantidad-a-reponer');
+            const confirmarBtn = document.getElementById('confirmar-reponer-dialog-confirmar');
+            const cancelarBtn = document.getElementById('confirmar-reponer-dialog-cancelar');
+            let formPendiente = null;
+
+            document.querySelectorAll('.reponer-form').forEach((form) => {
+                form.addEventListener('submit', (event) => {
+                    event.preventDefault();
+
+                    // required + min="1" del input: si no es válido, el
+                    // navegador muestra su propio globo de error acá y no
+                    // llegamos a abrir el modal con una cantidad vacía.
+                    if (!form.reportValidity()) {
+                        return;
+                    }
+
+                    formPendiente = form;
+                    nombreSpan.textContent = form.dataset.nombre;
+                    cantidadSpan.textContent = form.querySelector('input[name="cantidad"]').value;
+                    dialog.showModal();
+                });
+            });
+
+            confirmarBtn.addEventListener('click', () => {
+                dialog.close();
+                if (formPendiente) {
+                    formPendiente.submit();
+                }
+            });
+
+            cancelarBtn.addEventListener('click', () => dialog.close());
+        })();
+    </script>
 @endsection

@@ -122,6 +122,31 @@ class ProductoTest extends TenantTestCase
             ->assertSee('inputmode="numeric"', false);
     }
 
+    /**
+     * Regresión de markup: el form de "Reponer" no debe volver a mandar
+     * directo (type="submit" sin más) — el modal de confirmación (con su
+     * botón de confirmar) tiene que estar en la página, mismo patrón que
+     * usuarios/index.blade.php (eliminar) y ventas/create.blade.php
+     * (confirmar salida).
+     */
+    public function test_index_de_articulos_incluye_modal_de_confirmacion_de_reponer(): void
+    {
+        Producto::create([
+            'nombre' => 'Yerba 1kg',
+            'codigo_barras' => null,
+            'precio_costo' => 1000,
+            'precio_venta' => 1500,
+            'stock_minimo' => 3,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('productos.index'));
+
+        $response->assertOk();
+        $response->assertSee('class="reponer-form flex gap-1"', false);
+        $response->assertSee('id="confirmar-reponer-dialog"', false);
+        $response->assertSee('id="confirmar-reponer-dialog-confirmar"', false);
+    }
+
     public function test_bajo_minimo_segun_stock_actual(): void
     {
         $producto = Producto::create([
