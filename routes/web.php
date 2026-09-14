@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\Admin\ComercioController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
-use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use Illuminate\Support\Facades\Route;
 
@@ -10,14 +9,14 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+// El registro público que vivía acá se sacó (ver CLAUDE.md, decisión "sin
+// CREATE DATABASE en la app"): un comercio nuevo ya no se puede dar de
+// alta solo, necesita que PyFsa cree la base a mano en el panel del
+// hosting primero — ahora se hace desde /admin/comercios/create (ver
+// Admin\ComercioController).
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
     Route::post('/login', [AuthenticatedSessionController::class, 'store']);
-
-    // Alta pública de un Comercio nuevo (gap encontrado por el usuario, ver
-    // App\Http\Controllers\Auth\RegisteredUserController).
-    Route::get('/registro', [RegisteredUserController::class, 'create'])->name('registro');
-    Route::post('/registro', [RegisteredUserController::class, 'store']);
 });
 
 Route::middleware('auth')->group(function () {

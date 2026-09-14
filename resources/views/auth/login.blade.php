@@ -51,8 +51,4 @@
             Ingresar
         </button>
     </form>
-
-    <p class="text-sm text-center mt-4 opacity-70">
-        ¿No tenés cuenta? <a href="{{ route('registro') }}" class="underline">Registrate</a>
-    </p>
 @endsection

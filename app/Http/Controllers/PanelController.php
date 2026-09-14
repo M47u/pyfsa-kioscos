@@ -18,8 +18,9 @@ class PanelController extends Controller
     {
         return view('panel', [
             // Fallback al id crudo para comercios viejos (creados por
-            // tinker antes del flujo de registro) que nunca cargaron
-            // `nombre` — ver App\Http\Controllers\Auth\RegisteredUserController.
+            // tinker antes de que existiera un alta con formulario) que
+            // nunca cargaron `nombre` — el alta actual (ver
+            // Admin\ComercioController::store()) siempre lo carga.
             'comercioNombre' => tenant('nombre') ?? tenant('id'),
         ]);
     }
