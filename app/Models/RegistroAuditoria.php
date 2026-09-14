@@ -49,6 +49,19 @@ class RegistroAuditoria extends Model
     public const ACCION_COMERCIO_ESTADO_ACTUALIZADO = 'comercio.estado_actualizado';
 
     /**
+     * Provisionar un admin de plataforma es la acción MÁS privilegiada del
+     * sistema — una cuenta con `is_admin` ve y toca TODOS los comercios —,
+     * así que es la que menos puede quedar sin rastro. Se registra desde
+     * CrearAdminCommand, o sea desde consola: `user_id` va a quedar null
+     * (no hay sesión), igual que `ip`/`user_agent`. Es esperado, no un
+     * bug: el "quién" de una acción de consola es el acceso al servidor,
+     * que se audita afuera de esta app.
+     */
+    public const ACCION_ADMIN_CREADO = 'admin.creado';
+
+    public const ACCION_ADMIN_PROMOVIDO = 'admin.promovido';
+
+    /**
      * Etiquetas legibles para la vista — separadas del valor guardado a
      * propósito: cambiar el texto de la pantalla no debe reescribir el
      * historial ya persistido.
@@ -56,6 +69,8 @@ class RegistroAuditoria extends Model
     public const ETIQUETAS = [
         self::ACCION_COMERCIO_CREADO => 'Comercio creado',
         self::ACCION_COMERCIO_ESTADO_ACTUALIZADO => 'Estado de suscripción actualizado',
+        self::ACCION_ADMIN_CREADO => 'Administrador de plataforma creado',
+        self::ACCION_ADMIN_PROMOVIDO => 'Usuario promovido a administrador',
     ];
 
     protected $fillable = [

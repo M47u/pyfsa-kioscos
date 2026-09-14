@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Models\RegistroAuditoria;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
@@ -71,7 +72,9 @@ class CrearAdminCommand extends Command
             }
         }
 
-        if ($usuario->trashed()) {
+        $estabaDadoDeBaja = $usuario->trashed();
+
+        if ($estabaDadoDeBaja) {
             $usuario->restore();
             $this->warn("El usuario {$usuario->email} estaba dado de baja (eliminación lógica) y se restauró para poder promoverlo.");
         }
@@ -86,12 +89,22 @@ class CrearAdminCommand extends Command
         }
 
         if ($usuario->is_admin) {
+            // Un no-op de verdad no se audita (ensuciaría el log con filas
+            // que no son un cambio). Pero si la fila venía dada de baja,
+            // restaurarla SÍ fue un cambio real — y devolverle el acceso a
+            // todos los comercios a una cuenta que estaba desactivada es
+            // exactamente lo que un log de seguridad tiene que mostrar.
+            if ($estabaDadoDeBaja) {
+                $this->auditarPromocion($usuario, restaurado: true, yaEraAdmin: true);
+            }
+
             $this->info("{$usuario->email} ya era administrador. No hay nada que hacer.");
 
             return self::SUCCESS;
         }
 
         $this->marcarComoAdmin($usuario);
+        $this->auditarPromocion($usuario, restaurado: $estabaDadoDeBaja, yaEraAdmin: false);
 
         $this->info("{$usuario->email} ahora es administrador de plataforma.");
 
@@ -131,6 +144,18 @@ class CrearAdminCommand extends Command
         ]);
 
         $this->marcarComoAdmin($usuario);
+
+        // Después de marcarComoAdmin() a propósito, mismo criterio que
+        // Admin\ComercioController::store(): si el save() fallara, no
+        // corresponde registrar un admin que no quedó creado.
+        RegistroAuditoria::registrar(
+            RegistroAuditoria::ACCION_ADMIN_CREADO,
+            detalles: [
+                'email' => $usuario->email,
+                'nombre' => $usuario->name,
+                'usuario_id' => $usuario->id,
+            ],
+        );
 
         $this->info("Administrador {$email} creado correctamente.");
 
@@ -205,5 +230,27 @@ class CrearAdminCommand extends Command
     {
         $usuario->is_admin = true;
         $usuario->save();
+    }
+
+    /**
+     * `comercio_id` queda null a propósito: promover a un admin no es una
+     * acción SOBRE un comercio, es sobre la plataforma entera (aunque el
+     * usuario promovido pertenezca a uno, dato que igual queda en
+     * `detalles`). `user_id` también queda null — lo resuelve
+     * RegistroAuditoria::registrar() desde auth(), y en consola no hay
+     * sesión; lo mismo con `ip`/`user_agent`.
+     */
+    private function auditarPromocion(User $usuario, bool $restaurado, bool $yaEraAdmin): void
+    {
+        RegistroAuditoria::registrar(
+            RegistroAuditoria::ACCION_ADMIN_PROMOVIDO,
+            detalles: [
+                'email' => $usuario->email,
+                'usuario_id' => $usuario->id,
+                'restaurado_de_baja' => $restaurado,
+                'ya_era_admin' => $yaEraAdmin,
+                'comercio_id_del_usuario' => $usuario->comercio_id,
+            ],
+        );
     }
 }

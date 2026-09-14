@@ -55,7 +55,15 @@
                             @forelse ($registro->detalles ?? [] as $clave => $valor)
                                 <span class="block">
                                     <span class="opacity-70">{{ str_replace('_', ' ', $clave) }}:</span>
-                                    {{ $valor ?? '—' }}
+                                    {{-- Los detalles de admin.promovido guardan booleanos
+                                         (restaurado_de_baja, ya_era_admin): sin esto, Blade
+                                         imprimiría "1" para true y nada para false, que se
+                                         lee igual que un dato faltante. --}}
+                                    @if (is_bool($valor))
+                                        {{ $valor ? 'sí' : 'no' }}
+                                    @else
+                                        {{ $valor ?? '—' }}
+                                    @endif
                                 </span>
                             @empty
                                 <span class="opacity-70">—</span>
