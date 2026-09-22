@@ -13,6 +13,7 @@ use App\Models\Producto;
 use App\Models\Venta;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -52,7 +53,47 @@ class VentaController extends Controller
     {
         return view('ventas.create', [
             'clientes' => Cliente::query()->orderBy('nombre')->get(),
+            'productosFrecuentes' => $this->productosFrecuentes(),
         ]);
+    }
+
+    /**
+     * Productos frecuentes (POS/UX, gap encontrado por el usuario): top-N
+     * por CANTIDAD vendida en los últimos 30 días (no anuladas), pensados
+     * como botones de acceso rápido en la pantalla de venta — el kiosquero
+     * no debería tener que buscar/escanear la gaseosa que vende 40 veces
+     * por día. Mismo patrón join+groupBy+limit a nivel SQL que
+     * ReporteController::topProductosPorCantidad(), sin duplicar ese
+     * método porque acá el filtro es por fecha relativa (30 días), no por
+     * tramo de mes/fin de semana, y no necesita las demás secciones de
+     * Reportes. Server-rendered en ventas.create (no un endpoint aparte):
+     * así queda cacheado por el Service Worker junto con el resto del app
+     * shell de /ventas/create y sigue disponible offline (ver CLAUDE.md,
+     * arquitectura offline), aunque sea la foto de la última vez que se
+     * abrió la página con conexión.
+     *
+     * @return Collection<int, Producto>
+     */
+    private function productosFrecuentes(int $limite = 8): Collection
+    {
+        $desde = now()->subDays(30);
+
+        $filas = DB::table('items_venta')
+            ->join('ventas', 'ventas.id', '=', 'items_venta.venta_id')
+            ->whereNull('ventas.anulada_en')
+            ->where('ventas.created_at', '>=', $desde)
+            ->selectRaw('items_venta.producto_id, SUM(items_venta.cantidad) as cantidad_total')
+            ->groupBy('items_venta.producto_id')
+            ->orderByDesc('cantidad_total')
+            ->limit($limite)
+            ->get();
+
+        $productos = Producto::whereIn('id', $filas->pluck('producto_id'))->get()->keyBy('id');
+
+        return $filas
+            ->map(fn ($fila) => $productos->get($fila->producto_id))
+            ->filter()
+            ->values();
     }
 
     /**
@@ -170,6 +211,16 @@ class VentaController extends Controller
 
             foreach ($cantidadesPorProducto as $productoId => $cantidadPedida) {
                 $producto = $productos[$productoId];
+
+                // Control de stock opcional (ver Producto::controla_stock):
+                // nunca bloquea la venta ni se marca
+                // sincronizada_con_stock_insuficiente para este producto,
+                // sea cual sea la cantidad pedida — el kiosquero decidió
+                // explícitamente no llevarle la cuenta.
+                if (! $producto->controla_stock) {
+                    continue;
+                }
+
                 $stockActual = $producto->stockActual();
 
                 if ($cantidadPedida > $stockActual) {

@@ -8,17 +8,62 @@
     <x-status-banner />
     <x-validation-errors />
 
+    {{-- Alertas (POS/UX, gap encontrado por el usuario): solo lo
+         ACCIONABLE, reusando datos ya calculados más abajo — nada de
+         notificaciones irrelevantes. Si no hay ninguna, no se muestra
+         nada (evita ruido en el día a día sin problemas). --}}
+    @php
+        $hayAlertas = $productosBajoMinimo > 0
+            || $cantidadDeudoresQueSuperanLimite > 0
+            || $ventasOfflineConStockInsuficiente > 0
+            || ($diferenciaUltimoCierre !== null && abs($diferenciaUltimoCierre) > 0.0);
+    @endphp
+
+    @if ($hayAlertas)
+        <div class="mb-4 rounded-sm border border-[#F5A623] bg-[#fffbea] dark:bg-[#2a2200] text-[#8a6100] dark:text-[#F5C453] p-4">
+            <h2 class="text-sm font-medium mb-2">Alertas</h2>
+            <ul class="text-sm list-disc list-inside space-y-1">
+                @if ($productosBajoMinimo > 0)
+                    <li>
+                        {{ $productosBajoMinimo }} {{ $productosBajoMinimo === 1 ? 'artículo bajo su stock mínimo' : 'artículos bajo su stock mínimo' }}
+                        — <a href="{{ route('productos.index', ['bajo_minimo' => 1]) }}" class="underline">ver</a>
+                    </li>
+                @endif
+                @if ($cantidadDeudoresQueSuperanLimite > 0)
+                    <li>{{ $cantidadDeudoresQueSuperanLimite }} {{ $cantidadDeudoresQueSuperanLimite === 1 ? 'cliente superó' : 'clientes superaron' }} su límite de crédito</li>
+                @endif
+                @if ($ventasOfflineConStockInsuficiente > 0)
+                    <li>
+                        {{ $ventasOfflineConStockInsuficiente }} {{ $ventasOfflineConStockInsuficiente === 1 ? 'venta offline con stock insuficiente pendiente de revisar' : 'ventas offline con stock insuficiente pendientes de revisar' }}
+                        — <a href="{{ route('ventas.index', ['stock_insuficiente' => 1]) }}" class="underline">ver</a>
+                    </li>
+                @endif
+                @if ($diferenciaUltimoCierre !== null && abs($diferenciaUltimoCierre) > 0.0)
+                    <li>
+                        El último cierre de caja quedó con una diferencia de {{ number_format($diferenciaUltimoCierre, 2) }}
+                        — <a href="{{ route('caja.show') }}" class="underline">ver caja</a>
+                    </li>
+                @endif
+            </ul>
+        </div>
+    @endif
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        {{-- Ventas del día y de la semana, con el día pico destacado. --}}
+        {{-- Ventas del día y de la semana, con el día pico destacado, más
+             cantidad de tickets y ticket promedio (dashboard, gap
+             encontrado por el usuario). --}}
         <div class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] p-4">
             <h2 class="text-sm font-medium mb-3">Ventas del día y de la semana</h2>
 
             <dl class="grid grid-cols-2 gap-y-2 text-sm mb-4">
                 <dt class="opacity-70">Hoy</dt>
-                <dd class="font-medium">{{ number_format($totalHoy, 2) }}</dd>
+                <dd class="font-medium">{{ number_format($totalHoy, 2) }} ({{ $cantidadTicketsHoy }} {{ $cantidadTicketsHoy === 1 ? 'ticket' : 'tickets' }})</dd>
 
                 <dt class="opacity-70">Esta semana</dt>
-                <dd class="font-medium">{{ number_format($totalSemana, 2) }}</dd>
+                <dd class="font-medium">{{ number_format($totalSemana, 2) }} ({{ $cantidadTicketsSemana }} {{ $cantidadTicketsSemana === 1 ? 'ticket' : 'tickets' }})</dd>
+
+                <dt class="opacity-70">Ticket promedio (semana)</dt>
+                <dd class="font-medium">{{ number_format($ticketPromedioSemana, 2) }}</dd>
             </dl>
 
             <table class="w-full text-sm border-collapse">
@@ -49,6 +94,19 @@
             @else
                 <p class="text-sm opacity-70">Todavía no hay ventas esta semana.</p>
             @endif
+        </div>
+
+        {{-- Resumen por método de pago (semana) — dashboard, gap
+             encontrado por el usuario. --}}
+        <div class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] p-4">
+            <h2 class="text-sm font-medium mb-3">Ventas de la semana por método de pago</h2>
+
+            <dl class="grid grid-cols-2 gap-y-2 text-sm">
+                @foreach (\App\Models\Venta::ETIQUETAS_MEDIO_PAGO as $medio => $etiqueta)
+                    <dt class="opacity-70">{{ $etiqueta }}</dt>
+                    <dd class="font-medium">{{ number_format($resumenPorMedioPagoSemana[$medio] ?? 0, 2) }}</dd>
+                @endforeach
+            </dl>
         </div>
 
         {{-- Cuentas por cobrar (fiado): total combinado + ranking de

@@ -92,6 +92,11 @@ class RolTest extends TenantTestCase
 
         $this->actingAs($empleado)->get(route('panel'))->assertOk();
 
+        // Caja (POS/UX, gap encontrado por el usuario): compartida
+        // dueño+empleado, a diferencia de Productos/Reportes/Usuarios —
+        // operar la caja es parte de vender.
+        $this->actingAs($empleado)->get(route('caja.show'))->assertOk();
+
         $this->actingAs($empleado)->get(route('ventas.index'))->assertOk();
         $this->actingAs($empleado)->post(route('ventas.store'), [
             'medio_pago' => 'efectivo',
@@ -119,6 +124,7 @@ class RolTest extends TenantTestCase
 
         // Compartido con empleado.
         $this->actingAs($this->user)->get(route('panel'))->assertOk();
+        $this->actingAs($this->user)->get(route('caja.show'))->assertOk();
         $this->actingAs($this->user)->get(route('ventas.index'))->assertOk();
         $this->actingAs($this->user)->get(route('clientes.index'))->assertOk();
         $this->actingAs($this->user)->get(route('clientes.show', $cliente))->assertOk();

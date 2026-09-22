@@ -23,9 +23,14 @@
  */
 
 const DB_NOMBRE = 'pyfsa_kioscos_offline';
-const DB_VERSION = 1;
+// v2: agrega STORE_PRODUCTOS (catálogo cacheado para buscar productos sin
+// conexión — ver sincronizarCatalogoProductos()/buscarEnCatalogoLocal() más
+// abajo). Bump obligatorio: onupgradeneeded solo corre si la versión pedida
+// es mayor a la que ya tiene el navegador guardada de una sesión anterior.
+const DB_VERSION = 2;
 const STORE_VENTAS = 'ventas_pendientes';
 const STORE_PAGOS = 'pagos_pendientes';
+const STORE_PRODUCTOS = 'productos_cache';
 
 let dbPromise = null;
 
@@ -46,6 +51,9 @@ function abrirDb() {
             if (!db.objectStoreNames.contains(STORE_PAGOS)) {
                 db.createObjectStore(STORE_PAGOS, { keyPath: 'uuid_dispositivo' });
             }
+            if (!db.objectStoreNames.contains(STORE_PRODUCTOS)) {
+                db.createObjectStore(STORE_PRODUCTOS, { keyPath: 'id' });
+            }
         };
 
         request.onsuccess = () => resolve(request.result);
@@ -53,6 +61,17 @@ function abrirDb() {
     });
 
     return dbPromise;
+}
+
+function reemplazarTodos(nombreStore, items) {
+    return abrirDb().then((db) => new Promise((resolve, reject) => {
+        const tx = db.transaction(nombreStore, 'readwrite');
+        const store = tx.objectStore(nombreStore);
+        store.clear();
+        items.forEach((item) => store.put(item));
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    }));
 }
 
 function guardar(nombreStore, item) {
@@ -263,8 +282,95 @@ if (navigator.onLine) {
     sincronizarPendientes();
 }
 
+/**
+ * Catálogo de productos cacheado en IndexedDB (documento de alcance,
+ * arquitectura offline — "productos necesarios disponibles offline"): sin
+ * esto, buscar un producto en /ventas/create con la señal cortada fallaría
+ * siempre, porque la búsqueda en vivo (ver ventas/create.blade.php) le pega
+ * a productos.buscar por red. Se sincroniza (reemplazo completo, no merge
+ * incremental — un catálogo de este tamaño no lo necesita) cada vez que la
+ * página carga con conexión, así que el peor caso es buscar contra una foto
+ * de hasta la última vez que hubo señal, nunca contra nada.
+ *
+ * @param {string} url ruta de productos.catalogo
+ */
+export async function sincronizarCatalogoProductos(url) {
+    if (!navigator.onLine) {
+        return;
+    }
+
+    try {
+        const respuesta = await fetch(url, {
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json' },
+        });
+
+        if (!respuesta.ok) {
+            return;
+        }
+
+        const productos = await respuesta.json();
+        await reemplazarTodos(STORE_PRODUCTOS, productos);
+    } catch (error) {
+        // Sin conexión real a pesar de navigator.onLine, o servidor caído:
+        // el cache local queda tal cual estaba (una foto vieja es mejor que
+        // ninguna) — no es un error que el cajero necesite ver.
+    }
+}
+
+/**
+ * Búsqueda tolerante equivalente a Producto::scopeSearch (ver ese método en
+ * PHP): todas las palabras del término deben aparecer como substring de
+ * `nombre`, o el término completo coincide con `codigo_barras`. Se duplica
+ * la lógica acá en vez de compartirla porque un lado corre como SQL (MySQL
+ * LIKE) y el otro en JS puro contra un array ya en memoria — no hay forma
+ * de compartir una sola implementación entre PHP y el navegador.
+ *
+ * @param {string} termino
+ * @returns {Promise<Array<object>>}
+ */
+export async function buscarEnCatalogoLocal(termino) {
+    const term = termino.trim();
+    if (term === '') {
+        return [];
+    }
+
+    const productos = await listar(STORE_PRODUCTOS);
+    const normalizar = (texto) => texto.toLowerCase();
+    const termNormalizado = normalizar(term);
+    const palabras = term.split(/\s+/).map(normalizar).filter((palabra) => palabra.length > 1);
+
+    return productos.filter((producto) => {
+        if (producto.codigo_barras && normalizar(producto.codigo_barras).includes(termNormalizado)) {
+            return true;
+        }
+
+        const nombre = normalizar(producto.nombre);
+
+        return palabras.length > 0
+            ? palabras.every((palabra) => nombre.includes(palabra))
+            : nombre.includes(termNormalizado);
+    }).slice(0, 20);
+}
+
+/**
+ * Match exacto de código de barras contra el cache local — usado por el
+ * flujo de Enter/lector de código cuando la búsqueda por red falló (ver
+ * ventas/create.blade.php).
+ *
+ * @param {string} codigo
+ * @returns {Promise<?object>}
+ */
+export async function buscarPorCodigoExactoLocal(codigo) {
+    const productos = await listar(STORE_PRODUCTOS);
+    return productos.find((producto) => producto.codigo_barras === codigo) ?? null;
+}
+
 window.offlineSync = {
     enviarOEncolar,
     contarPendientes,
     sincronizarPendientes,
+    sincronizarCatalogoProductos,
+    buscarEnCatalogoLocal,
+    buscarPorCodigoExactoLocal,
 };

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\CajaController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\PanelController;
 use App\Http\Controllers\ProductoController;
@@ -43,6 +44,23 @@ Route::middleware([
     Route::resource('clientes', ClienteController::class)->only(['index', 'create', 'store', 'show']);
     Route::post('clientes/{cliente}/pagos', [ClienteController::class, 'registrarPago'])->name('clientes.pagos.store');
     Route::resource('ventas', VentaController::class)->only(['index', 'create', 'store']);
+
+    // Caja (compartida dueño+empleado, gap encontrado por el usuario — spec
+    // POS: "VENDEDOR: Venta, Caja"): operar la caja es parte de vender, no
+    // de administrar el comercio, por eso vive afuera del sub-grupo
+    // dueño-only de abajo. Ver CajaController.
+    Route::get('caja', [CajaController::class, 'show'])->name('caja.show');
+    Route::post('caja/abrir', [CajaController::class, 'abrir'])->name('caja.abrir');
+    Route::post('caja/movimientos', [CajaController::class, 'registrarMovimiento'])->name('caja.movimientos.store');
+    Route::post('caja/cerrar', [CajaController::class, 'cerrar'])->name('caja.cerrar');
+
+    // Búsqueda de productos para VENDER (compartida dueño+empleado — ver
+    // ProductoController::buscar()/catalogo()), a diferencia de la
+    // administración del catálogo (productos.*, dueño-only, más abajo).
+    // Rutas estáticas antes de cualquier resource de productos, mismo
+    // criterio que productos/importar.
+    Route::get('productos/buscar', [ProductoController::class, 'buscar'])->name('productos.buscar');
+    Route::get('productos/catalogo', [ProductoController::class, 'catalogo'])->name('productos.catalogo');
 
     // Dueño-only (documento de alcance, módulo 3.5 "Usuarios"): sin
     // permisos granulares, el empleado solo vende y cobra fiado (arriba).

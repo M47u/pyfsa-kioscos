@@ -14,15 +14,26 @@
 
      Roles (documento de alcance, módulo 3.5 "Usuarios"): Productos,
      Reportes y Usuarios son dueño-only (mismo gate que EnsureUserIsDueno
-     en routes/tenant.php) — un empleado solo ve Ventas y Clientes acá. --}}
+     en routes/tenant.php) — un empleado solo ve Ventas, Caja y Clientes
+     acá.
+
+     Separación Operación/Administración (POS/UX, gap encontrado por el
+     usuario): puramente visual, NO cambia ningún permiso real — el gate
+     sigue siendo 'dueno' (EnsureUserIsDueno), 'grupo' solo decide el orden
+     y el separador. Operación primero: es lo que un empleado usa todo el
+     día, y lo que un dueño también usa más seguido que Reportes/Usuarios. --}}
 @php
     $secciones = collect([
-        ['ruta' => 'productos.index', 'activo' => 'productos.*', 'label' => 'Artículos', 'dueno' => true],
-        ['ruta' => 'clientes.index', 'activo' => 'clientes.*', 'label' => 'Clientes', 'dueno' => false],
-        ['ruta' => 'ventas.index', 'activo' => 'ventas.*', 'label' => 'Ventas', 'dueno' => false],
-        ['ruta' => 'reportes.index', 'activo' => 'reportes.*', 'label' => 'Reportes', 'dueno' => true],
-        ['ruta' => 'usuarios.index', 'activo' => 'usuarios.*', 'label' => 'Usuarios', 'dueno' => true],
+        ['ruta' => 'ventas.index', 'activo' => 'ventas.*', 'label' => 'Ventas', 'dueno' => false, 'grupo' => 'operacion'],
+        ['ruta' => 'caja.show', 'activo' => 'caja.*', 'label' => 'Caja', 'dueno' => false, 'grupo' => 'operacion'],
+        ['ruta' => 'clientes.index', 'activo' => 'clientes.*', 'label' => 'Clientes', 'dueno' => false, 'grupo' => 'operacion'],
+        ['ruta' => 'productos.index', 'activo' => 'productos.*', 'label' => 'Artículos', 'dueno' => true, 'grupo' => 'administracion'],
+        ['ruta' => 'reportes.index', 'activo' => 'reportes.*', 'label' => 'Reportes', 'dueno' => true, 'grupo' => 'administracion'],
+        ['ruta' => 'usuarios.index', 'activo' => 'usuarios.*', 'label' => 'Usuarios', 'dueno' => true, 'grupo' => 'administracion'],
     ])->filter(fn ($seccion) => ! $seccion['dueno'] || auth()->user()->esDueno());
+
+    $seccionesOperacion = $secciones->where('grupo', 'operacion');
+    $seccionesAdministracion = $secciones->where('grupo', 'administracion');
 @endphp
 
 <nav class="border-b border-[#19140035] dark:border-[#3E3E3A]">
@@ -45,9 +56,12 @@
             <span id="offline-status-badge" hidden class="rounded-sm bg-[#fffbea] dark:bg-[#2a2200] border border-[#F5A623] text-[#8a6100] dark:text-[#F5C453] px-2 py-0.5 text-xs font-medium"></span>
         </div>
 
-        {{-- Fila horizontal, solo desde sm: (640px) para arriba. --}}
+        {{-- Fila horizontal, solo desde sm: (640px) para arriba. Separador
+             vertical entre Operación y Administración — solo aparece si
+             hay algo del lado de Administración (un empleado no ve ni la
+             sección ni el separador). --}}
         <div class="hidden sm:flex items-center gap-6">
-            @foreach ($secciones as $seccion)
+            @foreach ($seccionesOperacion as $seccion)
                 <a
                     href="{{ route($seccion['ruta']) }}"
                     class="{{ request()->routeIs($seccion['activo']) ? 'underline font-medium' : '' }}"
@@ -55,6 +69,19 @@
                     {{ $seccion['label'] }}
                 </a>
             @endforeach
+
+            @if ($seccionesAdministracion->isNotEmpty())
+                <span class="opacity-30" aria-hidden="true">|</span>
+
+                @foreach ($seccionesAdministracion as $seccion)
+                    <a
+                        href="{{ route($seccion['ruta']) }}"
+                        class="{{ request()->routeIs($seccion['activo']) ? 'underline font-medium' : '' }}"
+                    >
+                        {{ $seccion['label'] }}
+                    </a>
+                @endforeach
+            @endif
 
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
@@ -71,8 +98,8 @@
                 ☰
             </summary>
 
-            <div class="absolute right-0 mt-2 w-44 flex flex-col rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-[#FDFDFC] dark:bg-[#0a0a0a] shadow-lg z-20 overflow-hidden">
-                @foreach ($secciones as $seccion)
+            <div class="absolute right-0 mt-2 w-48 flex flex-col rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-[#FDFDFC] dark:bg-[#0a0a0a] shadow-lg z-20 overflow-hidden">
+                @foreach ($seccionesOperacion as $seccion)
                     <a
                         href="{{ route($seccion['ruta']) }}"
                         class="px-4 py-2 hover:bg-[#f5f5f4] dark:hover:bg-[#161615] {{ request()->routeIs($seccion['activo']) ? 'underline font-medium' : '' }}"
@@ -80,6 +107,21 @@
                         {{ $seccion['label'] }}
                     </a>
                 @endforeach
+
+                @if ($seccionesAdministracion->isNotEmpty())
+                    <p class="px-4 pt-2 pb-1 text-xs font-medium opacity-50 border-t border-[#19140035] dark:border-[#3E3E3A]">
+                        Administración
+                    </p>
+
+                    @foreach ($seccionesAdministracion as $seccion)
+                        <a
+                            href="{{ route($seccion['ruta']) }}"
+                            class="px-4 py-2 hover:bg-[#f5f5f4] dark:hover:bg-[#161615] {{ request()->routeIs($seccion['activo']) ? 'underline font-medium' : '' }}"
+                        >
+                            {{ $seccion['label'] }}
+                        </a>
+                    @endforeach
+                @endif
 
                 <form method="POST" action="{{ route('logout') }}" class="border-t border-[#19140035] dark:border-[#3E3E3A]">
                     @csrf

@@ -74,50 +74,59 @@
                 @forelse ($productos as $producto)
                     @php
                         $stockActual = $producto->stockActual();
-                        $bajoMinimo = $stockActual < $producto->stock_minimo;
+                        $bajoMinimo = $producto->controla_stock && $stockActual < $producto->stock_minimo;
                     @endphp
                     <tr class="border-b border-[#19140035] dark:border-[#3E3E3A] {{ $bajoMinimo ? 'bg-[#fff2f2] dark:bg-[#1D0002]' : '' }}">
                         <td class="py-2 pr-4">{{ $producto->nombre }}</td>
                         <td class="py-2 pr-4">{{ $producto->codigo_barras ?? '—' }}</td>
                         <td class="py-2 pr-4">{{ number_format((float) $producto->precio_costo, 2) }}</td>
                         <td class="py-2 pr-4">{{ number_format((float) $producto->precio_venta, 2) }}</td>
-                        <td class="py-2 pr-4 {{ $bajoMinimo ? 'text-[#F53003] dark:text-[#FF4433] font-medium' : '' }}">
-                            {{ $stockActual }}
-                            @if ($bajoMinimo)
-                                <span class="ml-1 text-xs">(bajo mínimo)</span>
-                            @endif
-                        </td>
-                        <td class="py-2 pr-4">{{ $producto->stock_minimo }}</td>
+                        {{-- Sin control de stock: no tiene sentido mostrar un
+                             número que el kiosquero decidió no llevar (ver
+                             Producto::controla_stock). --}}
+                        @if (! $producto->controla_stock)
+                            <td class="py-2 pr-4 text-xs opacity-60">Sin control</td>
+                        @else
+                            <td class="py-2 pr-4 {{ $bajoMinimo ? 'text-[#F53003] dark:text-[#FF4433] font-medium' : '' }}">
+                                {{ $stockActual }}
+                                @if ($bajoMinimo)
+                                    <span class="ml-1 text-xs">(bajo mínimo)</span>
+                                @endif
+                            </td>
+                        @endif
+                        <td class="py-2 pr-4">{{ $producto->controla_stock ? $producto->stock_minimo : '—' }}</td>
                         <td class="py-2 pr-4">
-                            {{-- El submit se intercepta en JS (ver el modal
-                                 compartido al final de la vista) para pedir
-                                 confirmación antes de reponer — data-nombre
-                                 es lo único que este form necesita exponerle
-                                 al script, la cantidad la lee directo del
-                                 input en el momento del submit. --}}
-                            <form
-                                method="POST"
-                                action="{{ route('productos.reponer', $producto) }}"
-                                class="reponer-form flex gap-1"
-                                data-nombre="{{ $producto->nombre }}"
-                            >
-                                @csrf
-                                <input
-                                    type="number"
-                                    inputmode="numeric"
-                                    name="cantidad"
-                                    min="1"
-                                    placeholder="Cant."
-                                    required
-                                    class="w-20 rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-2 py-1 text-sm"
+                            @if ($producto->controla_stock)
+                                {{-- El submit se intercepta en JS (ver el modal
+                                     compartido al final de la vista) para pedir
+                                     confirmación antes de reponer — data-nombre
+                                     es lo único que este form necesita exponerle
+                                     al script, la cantidad la lee directo del
+                                     input en el momento del submit. --}}
+                                <form
+                                    method="POST"
+                                    action="{{ route('productos.reponer', $producto) }}"
+                                    class="reponer-form flex gap-1"
+                                    data-nombre="{{ $producto->nombre }}"
                                 >
-                                <button
-                                    type="submit"
-                                    class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] px-3 py-1 text-sm font-medium"
-                                >
-                                    Reponer
-                                </button>
-                            </form>
+                                    @csrf
+                                    <input
+                                        type="number"
+                                        inputmode="numeric"
+                                        name="cantidad"
+                                        min="1"
+                                        placeholder="Cant."
+                                        required
+                                        class="w-20 rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-2 py-1 text-sm"
+                                    >
+                                    <button
+                                        type="submit"
+                                        class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] px-3 py-1 text-sm font-medium"
+                                    >
+                                        Reponer
+                                    </button>
+                                </form>
+                            @endif
                         </td>
                         <td class="py-2">
                             <a href="{{ route('productos.edit', $producto) }}" class="underline text-sm">Editar</a>

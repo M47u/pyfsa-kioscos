@@ -65,6 +65,24 @@ class ClienteTest extends TenantTestCase
     }
 
     /**
+     * Alta rápida de cliente desde ventas/create.blade.php (cobro a cuenta
+     * corriente sin salir de la pantalla de venta): Accept: application/json
+     * devuelve el cliente recién creado en vez del redirect pensado para el
+     * <form> de clientes/create.blade.php — mismo criterio que
+     * ProductoController::index()/buscar().
+     */
+    public function test_alta_de_cliente_con_accept_json_devuelve_el_cliente_creado(): void
+    {
+        $response = $this->actingAs($this->user)->postJson(route('clientes.store'), [
+            'nombre' => 'Cliente Rápido',
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('nombre', 'Cliente Rápido');
+        $this->assertDatabaseHas('clientes', ['nombre' => 'Cliente Rápido']);
+    }
+
+    /**
      * Regresión de markup: el botón de "Registrar pago" no debe volver a
      * ser type="submit" directo, y el modal de confirmación (con sus
      * botones de confirmar/cancelar) tiene que estar en la página — es lo

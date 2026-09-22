@@ -74,7 +74,7 @@
                 @forelse ($ventas as $venta)
                     <tr class="border-b border-[#19140035] dark:border-[#3E3E3A] {{ $venta->estaAnulada() ? 'opacity-50' : '' }}">
                         <td class="py-2 pr-4">{{ $venta->created_at->format('d/m/Y H:i') }}</td>
-                        <td class="py-2 pr-4 capitalize">{{ $venta->medio_pago }}</td>
+                        <td class="py-2 pr-4">{{ $venta->etiquetaMedioPago() }}</td>
                         <td class="py-2 pr-4">{{ $venta->cliente?->nombre ?? '—' }}</td>
                         <td class="py-2 pr-4 {{ $venta->estaAnulada() ? 'line-through' : '' }}">
                             {{ number_format((float) $venta->total, 2) }}

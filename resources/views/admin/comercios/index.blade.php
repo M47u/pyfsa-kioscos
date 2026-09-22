@@ -48,7 +48,16 @@
             <tbody>
                 @forelse ($comercios as $comercio)
                     <tr class="border-b border-[#19140035] dark:border-[#3E3E3A]">
-                        <td class="py-2 pr-4 font-mono text-xs">{{ $comercio->id }}</td>
+                        {{-- Fallback al id crudo para comercios viejos sin
+                             `nombre` cargado (creados por tinker antes del
+                             alta con formulario) — mismo criterio que
+                             PanelController::index(). --}}
+                        <td class="py-2 pr-4">
+                            {{ $comercio->nombre ?? $comercio->id }}
+                            @if ($comercio->nombre)
+                                <span class="block font-mono text-xs opacity-50">{{ $comercio->id }}</span>
+                            @endif
+                        </td>
                         <td class="py-2 pr-4">{{ $comercio->cantidad_usuarios }}</td>
                         <td class="py-2 pr-4">
                             <select form="comercio-{{ $comercio->id }}" name="estado_suscripcion" class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-2 py-1">

@@ -392,4 +392,78 @@ class ProductoTest extends TenantTestCase
             'precio_venta' => 1200.0,
         ]);
     }
+
+    /**
+     * Control de stock opcional (gap encontrado por el usuario): un
+     * producto con controla_stock=false nunca cuenta como "bajo mínimo",
+     * ni siquiera con stock en cero (ver Producto::bajoMinimo()).
+     */
+    public function test_producto_sin_control_de_stock_nunca_esta_bajo_minimo(): void
+    {
+        $producto = Producto::create([
+            'nombre' => 'Bolsas sueltas',
+            'codigo_barras' => null,
+            'precio_costo' => 10,
+            'precio_venta' => 20,
+            'stock_minimo' => 5,
+            'controla_stock' => false,
+        ]);
+
+        $this->assertFalse($producto->bajoMinimo());
+    }
+
+    /**
+     * El filtro ?bajo_minimo=1 (usado desde Reportes) tampoco debe listar
+     * un producto sin control de stock, aunque su stock calculado esté por
+     * debajo de stock_minimo.
+     */
+    public function test_filtro_bajo_minimo_ignora_productos_sin_control_de_stock(): void
+    {
+        Producto::create([
+            'nombre' => 'Bolsas sueltas',
+            'codigo_barras' => null,
+            'precio_costo' => 10,
+            'precio_venta' => 20,
+            'stock_minimo' => 5,
+            'controla_stock' => false,
+        ]);
+
+        $conControl = Producto::create([
+            'nombre' => 'Yerba 1kg',
+            'codigo_barras' => null,
+            'precio_costo' => 1000,
+            'precio_venta' => 1500,
+            'stock_minimo' => 5,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('productos.index', ['bajo_minimo' => 1]));
+
+        $response->assertOk();
+        $response->assertSee('Yerba 1kg');
+        $response->assertDontSee('Bolsas sueltas');
+    }
+
+    /**
+     * Alta de un producto sin control de stock: el checkbox desmarcado
+     * (controla_stock ausente del form) debe guardar false, no el default
+     * true — ver ProductoRequest::prepareForValidation().
+     */
+    public function test_alta_de_producto_sin_tildar_controla_stock_lo_guarda_en_false(): void
+    {
+        $response = $this->actingAs($this->user)->post(route('productos.store'), [
+            'nombre' => 'Bolsas sueltas',
+            'codigo_barras' => null,
+            'precio_costo' => 10,
+            'precio_venta' => 20,
+            'stock_minimo' => 0,
+            // controla_stock ausente a propósito: simula el checkbox sin tildar.
+        ]);
+
+        $response->assertRedirect(route('productos.index'));
+
+        $this->assertDatabaseHas('productos', [
+            'nombre' => 'Bolsas sueltas',
+            'controla_stock' => false,
+        ]);
+    }
 }

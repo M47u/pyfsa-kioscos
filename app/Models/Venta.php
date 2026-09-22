@@ -14,7 +14,30 @@ class Venta extends Model
 
     public const MEDIO_PAGO_TRANSFERENCIA = 'transferencia';
 
+    // Débito y QR (POS/UX, gap encontrado por el usuario — spec de venta
+    // rápida): se preserva 'transferencia' aunque no aparezca en el nuevo
+    // selector de cobro de ventas/create.blade.php, por si algún comercio
+    // ya la usó o la sigue prefiriendo (nunca se le quitó soporte del lado
+    // del servidor).
+    public const MEDIO_PAGO_DEBITO = 'debito';
+
+    public const MEDIO_PAGO_QR = 'qr';
+
     public const MEDIO_PAGO_FIADO = 'fiado';
+
+    /**
+     * Etiquetas legibles para mostrar en pantalla (ver ventas/index.blade.php)
+     * — separadas del valor real de la columna, mismo criterio que
+     * RegistroAuditoria::ETIQUETAS: cambiar el texto no debe tocar datos ya
+     * guardados ni la validación en VentaRequest.
+     */
+    public const ETIQUETAS_MEDIO_PAGO = [
+        self::MEDIO_PAGO_EFECTIVO => 'Efectivo',
+        self::MEDIO_PAGO_TRANSFERENCIA => 'Transferencia',
+        self::MEDIO_PAGO_DEBITO => 'Débito',
+        self::MEDIO_PAGO_QR => 'QR',
+        self::MEDIO_PAGO_FIADO => 'Cuenta corriente',
+    ];
 
     protected $fillable = [
         'cliente_id',
@@ -69,5 +92,10 @@ class Venta extends Model
     public function estaAnulada(): bool
     {
         return $this->anulada_en !== null;
+    }
+
+    public function etiquetaMedioPago(): string
+    {
+        return self::ETIQUETAS_MEDIO_PAGO[$this->medio_pago] ?? $this->medio_pago;
     }
 }

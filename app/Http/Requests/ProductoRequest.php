@@ -36,6 +36,14 @@ class ProductoRequest extends FormRequest
         if ($this->input('stock_inicial') === null) {
             $this->merge(['stock_inicial' => 0]);
         }
+
+        // Checkbox HTML: si no viene tildado, el navegador no manda el
+        // campo — sin esto, 'controla_stock' quedaría ausente del array
+        // validado en vez de explícitamente false. Bug real encontrado por
+        // test: el default acá tiene que ser `false` (checkbox ausente =
+        // desmarcado), no `true` — con `true` como default, desmarcar el
+        // checkbox nunca se distinguía de dejarlo tildado.
+        $this->merge(['controla_stock' => $this->boolean('controla_stock')]);
     }
 
     public function rules(): array
@@ -65,6 +73,12 @@ class ProductoRequest extends FormRequest
             'precio_costo' => ['required', 'numeric', 'min:0'],
             'precio_venta' => ['required', 'numeric', 'min:0'],
             'stock_minimo' => ['nullable', 'integer', 'min:0'],
+            // Control de stock opcional (ver Producto::bajoMinimo() y
+            // VentaController::crearVenta): default true vía
+            // prepareForValidation(), preserva el comportamiento actual
+            // para todo producto ya cargado o dado de alta sin tocar el
+            // checkbox.
+            'controla_stock' => ['boolean'],
             // Solo se usa en el alta (ver ProductoController::store). No es
             // columna de `productos` — genera un MovimientoStock de
             // reposición, porque el stock nunca se guarda directo.

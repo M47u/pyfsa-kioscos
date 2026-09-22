@@ -7,13 +7,14 @@ namespace Tests\Feature;
 use App\Models\Cliente;
 use App\Models\MovimientoStock;
 use App\Models\Producto;
+use App\Models\User;
 use App\Models\Venta;
 use Illuminate\Support\Facades\DB;
 use PDO;
 
 class VentaTest extends TenantTestCase
 {
-    private function crearProducto(int $precioVenta = 1200): Producto
+    private function crearProducto(int $precioVenta = 1200, bool $controlaStock = true): Producto
     {
         $producto = Producto::create([
             'nombre' => 'Coca Cola 1.5L',
@@ -21,6 +22,7 @@ class VentaTest extends TenantTestCase
             'precio_costo' => 800,
             'precio_venta' => $precioVenta,
             'stock_minimo' => 5,
+            'controla_stock' => $controlaStock,
         ]);
 
         $producto->movimientos()->create([
@@ -339,5 +341,109 @@ class VentaTest extends TenantTestCase
         $response->assertSessionHasErrors('items');
         $this->assertSame(0, Venta::count());
         $this->assertSame(20, $producto->fresh()->stockActual());
+    }
+
+    /**
+     * Bug real encontrado (POS/UX): ventas/create.blade.php buscaba
+     * productos contra productos.index (dueño-only) — un empleado real
+     * recibía 403 al intentar buscar un producto para vender, aunque
+     * seguía pudiendo vender vía ventas.store directo (por eso ningún test
+     * viejo lo detectaba). productos.buscar es la ruta compartida nueva;
+     * productos.index sigue dueño-only sin cambios.
+     */
+    public function test_empleado_puede_buscar_productos_para_vender_pero_no_administrar_el_catalogo(): void
+    {
+        $empleado = User::factory()->create([
+            'comercio_id' => $this->comercio->id,
+            'rol' => User::ROL_EMPLEADO,
+        ]);
+        $this->crearProducto();
+
+        $this->actingAs($empleado)->getJson(route('productos.buscar', ['buscar' => 'Coca']))
+            ->assertOk()
+            ->assertJsonFragment(['nombre' => 'Coca Cola 1.5L']);
+
+        $this->actingAs($empleado)->getJson(route('productos.catalogo'))
+            ->assertOk()
+            ->assertJsonFragment(['nombre' => 'Coca Cola 1.5L']);
+
+        $this->actingAs($empleado)->get(route('productos.index'))->assertForbidden();
+    }
+
+    /**
+     * Búsqueda tolerante a texto parcial y orden de palabras (ver
+     * Producto::scopeSearch): "coc cola" debe encontrar "Coca Cola" aunque
+     * no sea substring literal de la frase completa.
+     */
+    public function test_busqueda_tolerante_encuentra_por_palabras_parciales(): void
+    {
+        Producto::create([
+            'nombre' => 'Alfajor Milka Chocolate 55g',
+            'codigo_barras' => null,
+            'precio_costo' => 300,
+            'precio_venta' => 500,
+            'stock_minimo' => 5,
+        ]);
+        $this->crearProducto(); // "Coca Cola 1.5L"
+
+        $this->actingAs($this->user)->getJson(route('productos.buscar', ['buscar' => 'coc cola']))
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonFragment(['nombre' => 'Coca Cola 1.5L']);
+
+        $this->actingAs($this->user)->getJson(route('productos.buscar', ['buscar' => 'alfajor milka']))
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonFragment(['nombre' => 'Alfajor Milka Chocolate 55g']);
+    }
+
+    /**
+     * Nuevos medios de pago (POS/UX): débito y QR se preservan junto a
+     * efectivo/transferencia/fiado (ver Venta::MEDIO_PAGO_*).
+     */
+    public function test_venta_acepta_debito_y_qr_como_medio_de_pago(): void
+    {
+        $producto = $this->crearProducto();
+
+        $this->actingAs($this->user)->post(route('ventas.store'), [
+            'medio_pago' => Venta::MEDIO_PAGO_DEBITO,
+            'items' => [['producto_id' => $producto->id, 'cantidad' => 1]],
+        ])->assertRedirect(route('ventas.index'));
+
+        $this->actingAs($this->user)->post(route('ventas.store'), [
+            'medio_pago' => Venta::MEDIO_PAGO_QR,
+            'items' => [['producto_id' => $producto->id, 'cantidad' => 1]],
+        ])->assertRedirect(route('ventas.index'));
+
+        $this->assertSame(1, Venta::where('medio_pago', Venta::MEDIO_PAGO_DEBITO)->count());
+        $this->assertSame(1, Venta::where('medio_pago', Venta::MEDIO_PAGO_QR)->count());
+    }
+
+    /**
+     * Control de stock opcional (gap encontrado por el usuario): un
+     * producto con controla_stock=false nunca bloquea la venta ni se marca
+     * sincronizada_con_stock_insuficiente, ni siquiera SIN uuid_dispositivo
+     * (venta online normal) — a diferencia de la relajación offline, que
+     * SÍ depende de uuid_dispositivo (ver los tests de arriba).
+     */
+    public function test_producto_sin_control_de_stock_no_bloquea_venta_online_con_stock_insuficiente(): void
+    {
+        $producto = $this->crearProducto(controlaStock: false); // stock inicial: 20
+
+        $response = $this->actingAs($this->user)->post(route('ventas.store'), [
+            'medio_pago' => 'efectivo',
+            'items' => [
+                ['producto_id' => $producto->id, 'cantidad' => 25],
+            ],
+        ]);
+
+        $response->assertRedirect(route('ventas.index'));
+        $response->assertSessionHasNoErrors();
+
+        $this->assertSame(1, Venta::count());
+        $this->assertDatabaseHas('ventas', [
+            'sincronizada_con_stock_insuficiente' => false,
+        ]);
+        $this->assertSame(-5, $producto->fresh()->stockActual());
     }
 }

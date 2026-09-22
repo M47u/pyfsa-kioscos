@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\Caja;
 use App\Models\Cliente;
 use App\Models\Pago;
 use App\Models\Producto;
@@ -57,7 +58,8 @@ class ReporteController extends Controller
         $inicioSemana = now()->startOfWeek();
         $finSemana = now()->endOfWeek();
 
-        [$ventasPorDia, $totalHoy, $totalSemana, $diaPico] = $this->ventasDeLaSemana($inicioSemana, $finSemana);
+        [$ventasPorDia, $totalHoy, $totalSemana, $diaPico, $cantidadTicketsHoy, $cantidadTicketsSemana, $resumenPorMedioPagoSemana] =
+            $this->ventasDeLaSemana($inicioSemana, $finSemana);
 
         [$productoMasVendido, $cantidadMasVendida] = $this->productoMasVendidoDeLaSemana($inicioSemana, $finSemana);
 
@@ -72,17 +74,28 @@ class ReporteController extends Controller
 
         [$topFinDeSemana, $topDiasDeSemana] = $this->masVendidoFinDeSemana();
 
+        $ticketPromedioSemana = $cantidadTicketsSemana > 0 ? $totalSemana / $cantidadTicketsSemana : 0.0;
+
+        $cantidadDeudoresQueSuperanLimite = $rankingDeudores->where('supera_limite', true)->count();
+        $diferenciaUltimoCierre = $this->diferenciaUltimoCierreDeCaja();
+
         return view('reportes.index', [
             'ventasPorDia' => $ventasPorDia,
             'totalHoy' => $totalHoy,
             'totalSemana' => $totalSemana,
             'diaPico' => $diaPico,
+            'cantidadTicketsHoy' => $cantidadTicketsHoy,
+            'cantidadTicketsSemana' => $cantidadTicketsSemana,
+            'ticketPromedioSemana' => $ticketPromedioSemana,
+            'resumenPorMedioPagoSemana' => $resumenPorMedioPagoSemana,
             'productoMasVendido' => $productoMasVendido,
             'cantidadMasVendida' => $cantidadMasVendida,
             'totalPorCobrar' => $totalPorCobrar,
             'rankingDeudores' => $rankingDeudores,
             'productosBajoMinimo' => $productosBajoMinimo,
             'ventasOfflineConStockInsuficiente' => $ventasOfflineConStockInsuficiente,
+            'cantidadDeudoresQueSuperanLimite' => $cantidadDeudoresQueSuperanLimite,
+            'diferenciaUltimoCierre' => $diferenciaUltimoCierre,
             'tendenciaPorTramo' => $tendenciaPorTramo,
             'topFinDeSemana' => $topFinDeSemana,
             'topDiasDeSemana' => $topDiasDeSemana,
@@ -98,7 +111,7 @@ class ReporteController extends Controller
      * una colección ya chica (a lo sumo unas pocas decenas/cientos de
      * ventas por semana para este tipo de negocio).
      *
-     * @return array{0: Collection<string, array{fecha: Carbon, nombre: string, total: float}>, 1: float, 2: float, 3: ?string}
+     * @return array{0: Collection<string, array{fecha: Carbon, nombre: string, total: float}>, 1: float, 2: float, 3: ?string, 4: int, 5: int, 6: array<string, float>}
      */
     private function ventasDeLaSemana(Carbon $inicioSemana, Carbon $finSemana): array
     {
@@ -109,7 +122,7 @@ class ReporteController extends Controller
         $ventas = Venta::query()
             ->whereBetween('created_at', [$inicioSemana, $finSemana])
             ->whereNull('anulada_en')
-            ->get(['total', 'created_at']);
+            ->get(['total', 'created_at', 'medio_pago']);
 
         $totalesPorFecha = $ventas
             ->groupBy(fn (Venta $venta) => $venta->created_at->format('Y-m-d'))
@@ -136,7 +149,39 @@ class ReporteController extends Controller
             ? $ventasPorDia->sortByDesc('total')->first()['nombre']
             : null;
 
-        return [$ventasPorDia, $totalHoy, $totalSemana, $diaPico];
+        // Dashboard (POS/UX, gap encontrado por el usuario): cantidad de
+        // tickets y ticket promedio — cada fila de $ventas YA es "hoy" o
+        // "esta semana" (la query las trajo así), separar hoy es un filtro
+        // en memoria sobre una colección ya chica, no una query nueva.
+        $cantidadTicketsSemana = $ventas->count();
+        $cantidadTicketsHoy = $ventas->filter(fn (Venta $venta) => $venta->created_at->isToday())->count();
+
+        // Resumen por método de pago (semana): agrupado en PHP sobre la
+        // misma colección ya traída — evita una segunda query solo para
+        // esto. Se incluyen los 5 medios aunque no tengan ventas (0), para
+        // que la vista no tenga que resolver cuáles faltan.
+        $resumenPorMedioPagoSemana = collect(Venta::ETIQUETAS_MEDIO_PAGO)
+            ->keys()
+            ->mapWithKeys(fn (string $medio) => [
+                $medio => (float) $ventas->where('medio_pago', $medio)->sum('total'),
+            ])
+            ->all();
+
+        return [$ventasPorDia, $totalHoy, $totalSemana, $diaPico, $cantidadTicketsHoy, $cantidadTicketsSemana, $resumenPorMedioPagoSemana];
+    }
+
+    /**
+     * Diferencia del último cierre de caja (ver Caja::diferencia) — null si
+     * todavía no se cerró ninguna caja. Usado por la sección de Alertas:
+     * una diferencia distinta de cero es justo el tipo de cosa que un
+     * dueño quiere ver apenas entra a Reportes, no descubrir buceando en
+     * /caja.
+     */
+    private function diferenciaUltimoCierreDeCaja(): ?float
+    {
+        $ultimaCaja = Caja::whereNotNull('cerrada_en')->latest('cerrada_en')->first();
+
+        return $ultimaCaja !== null ? (float) $ultimaCaja->diferencia : null;
     }
 
     /**
@@ -224,6 +269,7 @@ class ReporteController extends Controller
     private function cantidadProductosBajoMinimo(): int
     {
         return Producto::withSum('movimientos', 'cantidad')
+            ->where('controla_stock', true)
             ->get()
             ->filter(fn (Producto $producto) => ($producto->movimientos_sum_cantidad ?? 0) < $producto->stock_minimo)
             ->count();

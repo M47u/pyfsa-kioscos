@@ -11,6 +11,7 @@ use App\Models\Cliente;
 use App\Models\Pago;
 use App\Models\Venta;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -29,13 +30,29 @@ class ClienteController extends Controller
     public function create(): View
     {
         return view('clientes.create', [
-            'cliente' => new Cliente(),
+            'cliente' => new Cliente,
         ]);
     }
 
-    public function store(ClienteRequest $request): RedirectResponse
+    /**
+     * Accept: application/json (ver ventas/create.blade.php — alta rápida
+     * de cliente sin salir de la pantalla de venta, cuando se cobra a
+     * cuenta corriente y el cliente todavía no existe): devuelve el
+     * Cliente recién creado en vez del redirect pensado para el <form> de
+     * clientes/create.blade.php. Mismo criterio que
+     * ProductoController::index()/buscar() respondiendo distinto según el
+     * header Accept.
+     */
+    public function store(ClienteRequest $request): RedirectResponse|JsonResponse
     {
-        Cliente::create($request->validated());
+        $cliente = Cliente::create($request->validated());
+
+        if (request()->wantsJson()) {
+            return response()->json([
+                'id' => $cliente->id,
+                'nombre' => $cliente->nombre,
+            ], 201);
+        }
 
         return redirect()->route('clientes.index')->with('status', 'Cliente creado correctamente.');
     }

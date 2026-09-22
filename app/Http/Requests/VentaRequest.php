@@ -35,6 +35,8 @@ class VentaRequest extends FormRequest
                 Rule::in([
                     Venta::MEDIO_PAGO_EFECTIVO,
                     Venta::MEDIO_PAGO_TRANSFERENCIA,
+                    Venta::MEDIO_PAGO_DEBITO,
+                    Venta::MEDIO_PAGO_QR,
                     Venta::MEDIO_PAGO_FIADO,
                 ]),
             ],
@@ -127,6 +129,13 @@ class VentaRequest extends FormRequest
                 // Si el producto no existe, ya lo reporta la regla
                 // Rule::exists de items.*.producto_id: no duplicar el error.
                 if ($producto === null) {
+                    continue;
+                }
+
+                // Control de stock opcional (ver Producto::controla_stock):
+                // este producto nunca bloquea una venta por falta de stock,
+                // sea cual sea la cantidad pedida.
+                if (! $producto->controla_stock) {
                     continue;
                 }
 

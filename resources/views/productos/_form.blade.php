@@ -55,6 +55,24 @@
 </div>
 
 <div>
+    {{-- Control de stock opcional: desmarcado, este artículo nunca bloquea
+         una venta por falta de stock ni muestra advertencias de "bajo
+         mínimo" — pensado para bolsas sueltas, reventa variable, o
+         cualquier cosa que el kiosquero no quiera/pueda inventariar. --}}
+    <label class="flex items-center gap-2 text-sm">
+        <input
+            type="checkbox"
+            id="controla_stock"
+            name="controla_stock"
+            value="1"
+            @checked(old('controla_stock', $producto->controla_stock ?? true))
+            class="rounded-sm border-[#19140035] dark:border-[#3E3E3A]"
+        >
+        Controlar stock de este artículo
+    </label>
+</div>
+
+<div id="stock-minimo-wrapper">
     <label for="stock_minimo" class="block text-sm font-medium mb-1">Stock mínimo</label>
     <input
         id="stock_minimo"
@@ -66,3 +84,17 @@
         class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
     >
 </div>
+
+<script>
+    (function () {
+        const checkbox = document.getElementById('controla_stock');
+        const wrapper = document.getElementById('stock-minimo-wrapper');
+
+        function actualizar() {
+            wrapper.style.display = checkbox.checked ? '' : 'none';
+        }
+
+        checkbox.addEventListener('change', actualizar);
+        actualizar();
+    })();
+</script>
