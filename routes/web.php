@@ -50,6 +50,7 @@ Route::middleware(['auth', EnsureUserIsAdmin::class])
         Route::get('comercios/create', [ComercioController::class, 'create'])->name('comercios.create');
         Route::post('comercios', [ComercioController::class, 'store'])->name('comercios.store');
         Route::put('comercios/{comercio}', [ComercioController::class, 'update'])->name('comercios.update');
+        Route::post('comercios/{comercio}/restablecer-password', [ComercioController::class, 'restablecerPassword'])->name('comercios.restablecer-password');
 
         // Solo lectura: el rastro de acciones admin no se crea ni se edita
         // desde la web (ver RegistroAuditoria::registrar(), que lo escriben

@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Tests\Feature\Admin;
 
 use App\Models\Comercio;
+use App\Models\RegistroAuditoria;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Tests\Feature\Concerns\ProvisionaTenantConBaseReal;
 use Tests\TestCase;
 
@@ -124,6 +126,92 @@ class ComercioTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('2');
+    }
+
+    /**
+     * Regresión del listado: el correo mostrado es el del DUEÑO (rol
+     * explícito), no cualquier usuario del comercio — un empleado de
+     * relleno en la misma lista no debe aparecer en su lugar.
+     */
+    public function test_el_listado_muestra_el_correo_del_dueno(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $comercio = $this->crearComercioConBaseReal();
+        User::factory()->create([
+            'comercio_id' => $comercio->id,
+            'rol' => User::ROL_EMPLEADO,
+            'email' => 'empleado@example.com',
+        ]);
+        User::factory()->create([
+            'comercio_id' => $comercio->id,
+            'rol' => User::ROL_DUENO,
+            'email' => 'dueno@example.com',
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('admin.comercios.index'));
+
+        $response->assertOk();
+        $response->assertSee('dueno@example.com');
+    }
+
+    public function test_usuario_admin_puede_restablecer_la_password_del_dueno(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $comercio = $this->crearComercioConBaseReal();
+        $dueno = User::factory()->create([
+            'comercio_id' => $comercio->id,
+            'rol' => User::ROL_DUENO,
+            'password' => 'password-vieja',
+        ]);
+
+        $response = $this->actingAs($admin)->post(route('admin.comercios.restablecer-password', $comercio));
+
+        $response->assertRedirect(route('admin.comercios.index'));
+        $response->assertSessionHas('password_generada.email', $dueno->email);
+
+        $nueva = session('password_generada')['password'];
+        $this->assertTrue(Hash::check($nueva, $dueno->fresh()->password));
+        $this->assertNotSame('password-vieja', $nueva);
+
+        $this->assertDatabaseHas('registros_auditoria', [
+            'accion' => RegistroAuditoria::ACCION_COMERCIO_PASSWORD_RESETEADA,
+            'comercio_id' => $comercio->id,
+            'user_id' => $admin->id,
+        ]);
+    }
+
+    /**
+     * Estado recuperable pero real (ver el docblock de
+     * ComercioController::store()): un comercio sin dueño no puede tirar un
+     * 500 al intentar restablecerle una contraseña a nadie.
+     */
+    public function test_restablecer_password_falla_sin_romper_si_el_comercio_no_tiene_dueno(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+        $comercio = $this->crearComercioConBaseReal();
+
+        $response = $this->actingAs($admin)->post(route('admin.comercios.restablecer-password', $comercio));
+
+        $response->assertSessionHasErrors('comercio');
+        $this->assertDatabaseMissing('registros_auditoria', [
+            'accion' => RegistroAuditoria::ACCION_COMERCIO_PASSWORD_RESETEADA,
+        ]);
+    }
+
+    public function test_usuario_sin_is_admin_no_puede_restablecer_password(): void
+    {
+        $user = User::factory()->create(['is_admin' => false]);
+        $comercio = $this->crearComercioConBaseReal();
+        $dueno = User::factory()->create([
+            'comercio_id' => $comercio->id,
+            'rol' => User::ROL_DUENO,
+            'password' => 'password-vieja',
+        ]);
+
+        $response = $this->actingAs($user)->post(route('admin.comercios.restablecer-password', $comercio));
+
+        $response->assertForbidden();
+        $this->assertTrue(Hash::check('password-vieja', $dueno->fresh()->password));
     }
 
     /**

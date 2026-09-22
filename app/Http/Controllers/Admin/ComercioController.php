@@ -12,6 +12,7 @@ use App\Models\RegistroAuditoria;
 use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -25,11 +26,24 @@ class ComercioController extends Controller
 {
     public function index(): View
     {
-        $comercios = Comercio::all()->map(function (Comercio $comercio) {
-            $comercio->setAttribute(
-                'cantidad_usuarios',
-                User::where('comercio_id', $comercio->id)->count(),
-            );
+        $comercios = Comercio::all();
+
+        // Un solo query trae a TODOS los usuarios de los comercios listados
+        // (agrupados en PHP por comercio_id) en vez de una query de conteo
+        // + una de dueño por cada fila — evita el N+1 que antes solo tenía
+        // el conteo.
+        $usuariosPorComercio = User::whereIn('comercio_id', $comercios->pluck('id'))
+            ->get()
+            ->groupBy('comercio_id');
+
+        $comercios = $comercios->map(function (Comercio $comercio) use ($usuariosPorComercio) {
+            $usuarios = $usuariosPorComercio->get($comercio->id, collect());
+
+            $comercio->setAttribute('cantidad_usuarios', $usuarios->count());
+            // Puede dar null: ver el docblock de store() — un fallo entre
+            // crear el Comercio y crear el User dueño deja esto sin dueño,
+            // estado recuperable pero real.
+            $comercio->setAttribute('dueno', $usuarios->firstWhere('rol', User::ROL_DUENO));
 
             return $comercio;
         });
@@ -97,6 +111,52 @@ class ComercioController extends Controller
     public function create(): View
     {
         return view('admin.comercios.create');
+    }
+
+    /**
+     * Restablece la contraseña del DUEÑO del comercio a una generada al
+     * azar — mismo mecanismo que CrearAdminCommand en su camino sin
+     * terminal (Str::password(20), mostrada UNA sola vez): PyFsa no puede
+     * "ver" la contraseña actual (queda hasheada), así que restablecerla
+     * es la única acción posible, ni hay un mailer configurado acá para un
+     * flujo de "olvidé mi contraseña" propio (ver CLAUDE.md).
+     *
+     * Solo al DUEÑO, no a un empleado cualquiera: este panel es a nivel
+     * comercio (el correo que se muestra en el listado es el suyo) — la
+     * gestión de empleados vive en el panel del propio dueño
+     * (UsuarioController), fuera del alcance de PyFsa.
+     */
+    public function restablecerPassword(Comercio $comercio): RedirectResponse
+    {
+        $dueno = User::where('comercio_id', $comercio->id)->where('rol', User::ROL_DUENO)->first();
+
+        if ($dueno === null) {
+            return redirect()->route('admin.comercios.index')
+                ->withErrors(['comercio' => 'Este comercio no tiene un dueño registrado — no hay a quién restablecerle la contraseña.']);
+        }
+
+        $nueva = Str::password(20);
+
+        // El cast 'hashed' de User (ver ese modelo) la pasa por Hash::make
+        // al guardar — nunca se guarda en texto plano.
+        $dueno->password = $nueva;
+        $dueno->save();
+
+        RegistroAuditoria::registrar(
+            RegistroAuditoria::ACCION_COMERCIO_PASSWORD_RESETEADA,
+            $comercio->id,
+            [
+                'email_dueno' => $dueno->email,
+                'usuario_id' => $dueno->id,
+            ],
+        );
+
+        // Flash aparte de `status` a propósito: <x-status-banner /> es
+        // texto libre, y esto necesita renderizarse distinto (destacado,
+        // seleccionable) porque es un dato sensible que no se vuelve a
+        // mostrar — ver admin/comercios/index.blade.php.
+        return redirect()->route('admin.comercios.index')
+            ->with('password_generada', ['email' => $dueno->email, 'password' => $nueva]);
     }
 
     /**

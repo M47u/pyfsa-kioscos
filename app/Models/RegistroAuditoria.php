@@ -63,6 +63,14 @@ class RegistroAuditoria extends Model
     public const ACCION_ADMIN_PROMOVIDO = 'admin.promovido';
 
     /**
+     * PyFsa restablece la contraseña del DUEÑO de un comercio desde
+     * /admin/comercios (ver Admin\ComercioController::restablecerPassword)
+     * cuando el cliente la perdió — no hay mailer configurado para un flujo
+     * de "olvidé mi contraseña" propio, así que esto reemplaza a ese flujo.
+     */
+    public const ACCION_COMERCIO_PASSWORD_RESETEADA = 'comercio.password_reseteada';
+
+    /**
      * Etiquetas legibles para la vista — separadas del valor guardado a
      * propósito: cambiar el texto de la pantalla no debe reescribir el
      * historial ya persistido.
@@ -72,6 +80,7 @@ class RegistroAuditoria extends Model
         self::ACCION_COMERCIO_ESTADO_ACTUALIZADO => 'Estado de suscripción actualizado',
         self::ACCION_ADMIN_CREADO => 'Administrador de plataforma creado',
         self::ACCION_ADMIN_PROMOVIDO => 'Usuario promovido a administrador',
+        self::ACCION_COMERCIO_PASSWORD_RESETEADA => 'Contraseña del dueño restablecida',
     ];
 
     protected $fillable = [

@@ -41,7 +41,21 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="{{ config('app.name') }}">
 
-    @vite(['resources/css/app.css'])
+    {{--
+        BUG histórico (desde el refactor que extrajo este layout compartido,
+        commit 48b3cda, 2026-09-05): acá solo se cargaba el CSS — el JS
+        (bootstrap.js + resources/js/offline.js, importados desde app.js)
+        NUNCA se ejecutaba en ninguna vista real del producto, solo en
+        welcome.blade.php (que tiene su propio @vite aparte, fuera de este
+        layout). Efecto en runtime: `window.offlineSync` quedaba siempre
+        undefined — cualquier código que lo usara SIN el guard `if
+        (window.offlineSync)` (ej. el submit de ventas/create.blade.php)
+        tiraba un TypeError al hacer clic en "Confirmar cobro"; los usos
+        CON guard (búsqueda offline, catálogo cacheado, badge del nav) no
+        rompían pero tampoco hacían nada — la mitad de la arquitectura
+        offline documentada en CLAUDE.md corría en el vacío.
+    --}}
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="flex flex-col min-h-screen bg-[#FDFDFC] dark:bg-[#0a0a0a] text-[#1b1b18] dark:text-[#EDEDEC]">
     {{--

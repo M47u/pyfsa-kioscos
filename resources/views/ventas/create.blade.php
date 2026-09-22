@@ -143,12 +143,15 @@
 
         {{-- Recién acá, con los artículos ya cargados, se elige cómo se
              cobra. Botones grandes en vez de <select>: menos clicks/toques
-             y coincide con el flujo TOTAL -> EFECTIVO/DÉBITO/QR/CUENTA del
-             documento de alcance. --}}
+             y coincide con el flujo TOTAL -> EFECTIVO/DÉBITO/QR/TRANSFERENCIA/
+             CUENTA del documento de alcance. "Transferencia" quedó afuera en
+             el rediseño original (el servidor siempre la siguió aceptando,
+             ver Venta::MEDIO_PAGO_TRANSFERENCIA) — se suma acá como quinto
+             botón, sin tocar backend. --}}
         <div id="cobro-panel" class="border-t border-[#19140035] dark:border-[#3E3E3A] pt-4 space-y-4">
             <p class="text-sm font-medium">Cobrar (F4)</p>
 
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
                 <button type="button" data-medio="efectivo" class="medio-pago-btn rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-3 text-sm font-medium">
                     💵<br>Efectivo
                 </button>
@@ -157,6 +160,9 @@
                 </button>
                 <button type="button" data-medio="qr" class="medio-pago-btn rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-3 text-sm font-medium">
                     📱<br>QR
+                </button>
+                <button type="button" data-medio="transferencia" class="medio-pago-btn rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-3 text-sm font-medium">
+                    🏦<br>Transferencia
                 </button>
                 <button type="button" data-medio="fiado" class="medio-pago-btn rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-3 text-sm font-medium">
                     📒<br>Cuenta
