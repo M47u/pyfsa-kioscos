@@ -25,13 +25,19 @@ class VentaController extends Controller
      * ventas offline con stock insuficiente pendientes de revisar en
      * Reportes (ver ReporteController) — mismo criterio que
      * ?bajo_minimo=1 en ProductoController::index().
+     *
+     * Un empleado ve SOLO sus propias ventas (user_id); el historial
+     * completo del comercio es dueño-only. El filtro vive acá y no en la
+     * vista: es autorización de datos, no presentación.
      */
     public function index(): View
     {
         $stockInsuficiente = request()->boolean('stock_insuficiente');
+        $usuario = auth()->user();
 
         $ventas = Venta::query()
             ->with('cliente')
+            ->when($usuario->esEmpleado(), fn ($query) => $query->where('user_id', $usuario->id))
             ->when($stockInsuficiente, fn ($query) => $query->where('sincronizada_con_stock_insuficiente', true))
             ->latest()
             ->get();

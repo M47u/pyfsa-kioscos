@@ -4,7 +4,7 @@
 
 @section('content')
     <div class="flex items-center justify-between mb-6">
-        <h1 class="text-lg font-medium">Ventas</h1>
+        <h1 class="text-lg font-medium">{{ auth()->user()->esDueno() ? 'Ventas' : 'Mis ventas' }}</h1>
         <a
             href="{{ route('ventas.create') }}"
             class="rounded-sm bg-[#1b1b18] dark:bg-[#eeeeec] text-white dark:text-[#1C1C1A] px-4 py-2 text-sm font-medium"
@@ -27,9 +27,9 @@
     <x-validation-errors />
 
     {{-- Anular es dueño-only (documento de alcance — corrección de error
-         humano, ver VentaController::anular): un empleado ve el historial
-         completo (columna "Estado" siempre visible, ninguna venta se
-         esconde) pero no ve la acción, y el controller la bloquea igual
+         humano, ver VentaController::anular): un empleado ve solo SUS
+         ventas (filtradas en VentaController::index, columna "Estado"
+         siempre visible) pero no ve la acción, y el controller la bloquea igual
          por EnsureUserIsDueno aunque intente a mano por URL. --}}
     @php
         $esDueno = auth()->user()->esDueno();

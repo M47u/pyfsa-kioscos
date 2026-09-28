@@ -80,6 +80,22 @@ class ZonaHorariaTest extends TenantTestCase
 
         $this->actingAs($this->user)->get(route('panel'));
 
-        $this->assertSame('America/Asuncion', date_default_timezone_get());
+        // Paraguay en UTC-3 fijo sin depender de la versión de tzdata de
+        // PHP (ver Comercio::ZONAS_HORARIAS_EFECTIVAS). Se prueba en
+        // invierno a propósito: con tzdata vieja, America/Asuncion daría
+        // -04:00 en esta fecha.
+        $this->assertSame('Etc/GMT+3', date_default_timezone_get());
+        $this->assertSame('-03:00', now()->setDate(2026, 7, 15)->format('P'));
+    }
+
+    public function test_argentina_sigue_en_utc_menos_3(): void
+    {
+        $this->actingAs($this->user)->post(route('zona-horaria.update'), [
+            'timezone' => 'America/Argentina/Buenos_Aires',
+        ]);
+
+        $this->actingAs($this->user)->get(route('panel'));
+
+        $this->assertSame('-03:00', now()->format('P'));
     }
 }

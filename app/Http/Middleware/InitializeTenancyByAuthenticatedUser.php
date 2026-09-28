@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Models\Comercio;
 use Closure;
 use Illuminate\Http\Request;
-use Stancl\Tenancy\Contracts\Tenant;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -33,11 +33,11 @@ class InitializeTenancyByAuthenticatedUser
 
     /**
      * Los comercios pueden estar en Argentina o Paraguay (ver
-     * Comercio::ZONAS_HORARIAS) y, a diferencia de Argentina, Paraguay
-     * tiene horario de verano — un huso fijo para toda la app no sirve.
-     * Mientras el comercio no lo eligió todavía (primer uso — ver
-     * EnsureComercioTimezoneIsConfigured), se usa el default de
-     * config/app.php.
+     * Comercio::ZONAS_HORARIAS). Hoy los dos países están en UTC-3 fijo,
+     * pero se mantiene por comercio para no depender de que eso siga así
+     * (ver Comercio::zonaHorariaEfectiva()). Mientras el comercio no lo
+     * eligió todavía (primer uso — ver EnsureComercioTimezoneIsConfigured),
+     * se usa el default de config/app.php.
      *
      * date_default_timezone_set() es estado global de PHP: seguro en el
      * modelo de una request = un proceso/hilo fresco (php artisan serve,
@@ -46,9 +46,9 @@ class InitializeTenancyByAuthenticatedUser
      * proceso PHP entre requests) esto se filtraría de un comercio a
      * otro y habría que resetearlo a mano al final de cada request.
      */
-    private function aplicarZonaHoraria(Tenant $comercio): void
+    private function aplicarZonaHoraria(Comercio $comercio): void
     {
-        $timezone = $comercio->timezone ?? config('app.timezone');
+        $timezone = $comercio->zonaHorariaEfectiva();
 
         date_default_timezone_set($timezone);
         config(['app.timezone' => $timezone]);

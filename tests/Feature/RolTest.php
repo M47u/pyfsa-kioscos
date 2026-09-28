@@ -8,6 +8,7 @@ use App\Models\Cliente;
 use App\Models\MovimientoStock;
 use App\Models\Producto;
 use App\Models\User;
+use App\Models\Venta;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -110,6 +111,25 @@ class RolTest extends TenantTestCase
         $this->actingAs($empleado)->post(route('clientes.pagos.store', $cliente), [
             'monto' => 100,
         ])->assertRedirect(route('clientes.show', $cliente));
+    }
+
+    public function test_empleado_ve_solo_sus_ventas_y_dueno_ve_todas(): void
+    {
+        $empleado = $this->crearEmpleado();
+        $otroEmpleado = $this->crearEmpleado();
+
+        Venta::create(['user_id' => $empleado->id, 'medio_pago' => Venta::MEDIO_PAGO_EFECTIVO, 'total' => 1111]);
+        Venta::create(['user_id' => $otroEmpleado->id, 'medio_pago' => Venta::MEDIO_PAGO_EFECTIVO, 'total' => 2222]);
+        Venta::create(['user_id' => $this->user->id, 'medio_pago' => Venta::MEDIO_PAGO_EFECTIVO, 'total' => 3333]);
+
+        $this->actingAs($empleado)->get(route('ventas.index'))
+            ->assertOk()
+            ->assertViewHas('ventas', fn ($ventas) => $ventas->pluck('user_id')->unique()->all() === [$empleado->id]
+                && $ventas->count() === 1);
+
+        $this->actingAs($this->user)->get(route('ventas.index'))
+            ->assertOk()
+            ->assertViewHas('ventas', fn ($ventas) => $ventas->count() === 3);
     }
 
     public function test_dueno_accede_a_todo_sin_restriccion(): void

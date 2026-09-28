@@ -125,4 +125,30 @@ class Comercio extends BaseTenant implements TenantWithDatabase
         'America/Argentina/Buenos_Aires' => 'Argentina (Formosa)',
         'America/Asuncion' => 'Paraguay (Alberdi)',
     ];
+
+    /**
+     * Paraguay dejó el horario de verano en octubre de 2024 y quedó en
+     * UTC-3 fijo todo el año (igual que Argentina). La base de husos que
+     * trae PHP puede ser anterior a ese cambio (en esta máquina es la
+     * 2023.3, que todavía aplica UTC-4 en invierno para America/Asuncion)
+     * y no se puede garantizar cuál trae el hosting — así que se fija el
+     * offset a mano en vez de confiar en tzdata.
+     *
+     * Ojo con el signo: en IANA los husos `Etc/GMT±N` van INVERTIDOS,
+     * `Etc/GMT+3` es UTC-3.
+     *
+     * El valor guardado en el comercio sigue siendo `America/Asuncion`
+     * (es lo que eligió, y lo que valida ZonaHorariaRequest); esto solo
+     * cambia qué huso se aplica en cada request.
+     */
+    public const ZONAS_HORARIAS_EFECTIVAS = [
+        'America/Asuncion' => 'Etc/GMT+3',
+    ];
+
+    public function zonaHorariaEfectiva(): string
+    {
+        $timezone = $this->timezone ?? config('app.timezone');
+
+        return self::ZONAS_HORARIAS_EFECTIVAS[$timezone] ?? $timezone;
+    }
 }
