@@ -8,6 +8,7 @@ use App\Models\Comercio;
 use App\Models\RegistroAuditoria;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Feature\Concerns\ProvisionaTenantConBaseReal;
 use Tests\TestCase;
@@ -321,5 +322,117 @@ class CrearAdminCommandTest extends TestCase
             ->assertFailed();
 
         $this->assertNull(User::where('email', 'distraido@pyfsa.test')->first());
+    }
+
+    public function test_reset_password_cambia_la_password_de_un_admin_existente(): void
+    {
+        $usuario = User::factory()->create([
+            'email' => 'olvidadizo@pyfsa.test',
+            'password' => 'vieja-password-123',
+            'is_admin' => true,
+        ]);
+
+        $this->artisan('admin:crear', ['email' => 'olvidadizo@pyfsa.test', '--reset-password' => true])
+            ->expectsQuestion('Contraseña del administrador', 'nueva-password-456')
+            ->expectsQuestion('Repetí la contraseña', 'nueva-password-456')
+            ->assertSuccessful();
+
+        $usuario->refresh();
+
+        $this->assertTrue(Hash::check('nueva-password-456', $usuario->password));
+        $this->assertFalse(Hash::check('vieja-password-123', $usuario->password));
+        $this->assertTrue($usuario->is_admin);
+    }
+
+    /**
+     * Si el reset es porque la cuenta pudo haberse comprometido, una sesión
+     * ya abierta con la password vieja no tiene que sobrevivir al cambio.
+     */
+    public function test_reset_password_cierra_las_sesiones_abiertas_del_usuario(): void
+    {
+        config(['session.driver' => 'database']);
+
+        $usuario = User::factory()->create(['email' => 'sesion@pyfsa.test', 'is_admin' => true]);
+        $otro = User::factory()->create();
+
+        foreach ([$usuario, $otro] as $i => $dueno) {
+            DB::table('sessions')->insert([
+                'id' => "sesion-{$i}",
+                'user_id' => $dueno->id,
+                'payload' => '',
+                'last_activity' => now()->timestamp,
+            ]);
+        }
+
+        $this->artisan('admin:crear', [
+            'email' => 'sesion@pyfsa.test',
+            '--reset-password' => true,
+            '--password' => 'nueva-password-456',
+        ])->assertSuccessful();
+
+        $this->assertSame(0, DB::table('sessions')->where('user_id', $usuario->id)->count());
+        $this->assertSame(1, DB::table('sessions')->where('user_id', $otro->id)->count());
+    }
+
+    public function test_reset_password_deja_un_registro_de_auditoria_sin_la_password(): void
+    {
+        $usuario = User::factory()->create(['email' => 'auditado@pyfsa.test', 'is_admin' => true]);
+
+        $this->artisan('admin:crear', [
+            'email' => 'auditado@pyfsa.test',
+            '--reset-password' => true,
+            '--password' => 'nueva-password-456',
+        ])->assertSuccessful();
+
+        $registro = RegistroAuditoria::sole();
+
+        $this->assertSame(RegistroAuditoria::ACCION_ADMIN_PASSWORD_RESETEADA, $registro->accion);
+        $this->assertSame($usuario->id, $registro->detalles['usuario_id']);
+        $this->assertStringNotContainsString('nueva-password-456', json_encode($registro->detalles));
+    }
+
+    /**
+     * La password se valida ANTES de cualquier escritura: un usuario que no
+     * era admin no puede quedar promovido a medias por un reset fallido.
+     */
+    public function test_reset_password_con_password_corta_falla_sin_promover_ni_cambiar_nada(): void
+    {
+        $usuario = User::factory()->create([
+            'email' => 'debil@pyfsa.test',
+            'password' => 'vieja-password-123',
+            'is_admin' => false,
+        ]);
+
+        $this->artisan('admin:crear', [
+            'email' => 'debil@pyfsa.test',
+            '--reset-password' => true,
+            '--password' => 'corta',
+        ])->assertFailed();
+
+        $usuario->refresh();
+
+        $this->assertFalse($usuario->is_admin);
+        $this->assertTrue(Hash::check('vieja-password-123', $usuario->password));
+        $this->assertSame(0, RegistroAuditoria::count());
+    }
+
+    /**
+     * Sin --reset-password, --password en un usuario existente se sigue
+     * ignorando (regresión del comportamiento previo).
+     */
+    public function test_sin_reset_password_no_se_cambia_la_password_de_un_usuario_existente(): void
+    {
+        $usuario = User::factory()->create([
+            'email' => 'intacto@pyfsa.test',
+            'password' => 'vieja-password-123',
+            'is_admin' => true,
+        ]);
+
+        $this->artisan('admin:crear', [
+            'email' => 'intacto@pyfsa.test',
+            '--password' => 'nueva-password-456',
+        ])->assertSuccessful();
+
+        $this->assertTrue(Hash::check('vieja-password-123', $usuario->fresh()->password));
     }
 }

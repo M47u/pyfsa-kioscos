@@ -63,6 +63,14 @@ class RegistroAuditoria extends Model
     public const ACCION_ADMIN_PROMOVIDO = 'admin.promovido';
 
     /**
+     * `php artisan admin:crear {email} --reset-password`: la única vía para
+     * recuperar el acceso a una cuenta admin (no hay mailer ni pantalla para
+     * eso). Mismo encuadre de consola que las dos de arriba: user_id/ip/
+     * user_agent quedan null. La contraseña nueva NUNCA va en `detalles`.
+     */
+    public const ACCION_ADMIN_PASSWORD_RESETEADA = 'admin.password_reseteada';
+
+    /**
      * PyFsa restablece la contraseña del DUEÑO de un comercio desde
      * /admin/comercios (ver Admin\ComercioController::restablecerPassword)
      * cuando el cliente la perdió — no hay mailer configurado para un flujo
@@ -81,6 +89,7 @@ class RegistroAuditoria extends Model
         self::ACCION_ADMIN_CREADO => 'Administrador de plataforma creado',
         self::ACCION_ADMIN_PROMOVIDO => 'Usuario promovido a administrador',
         self::ACCION_COMERCIO_PASSWORD_RESETEADA => 'Contraseña del dueño restablecida',
+        self::ACCION_ADMIN_PASSWORD_RESETEADA => 'Contraseña de administrador restablecida',
     ];
 
     protected $fillable = [

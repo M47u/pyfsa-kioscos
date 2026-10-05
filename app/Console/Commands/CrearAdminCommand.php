@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Models\RegistroAuditoria;
 use App\Models\User;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
@@ -34,7 +35,8 @@ class CrearAdminCommand extends Command
     protected $signature = 'admin:crear
         {email : Email del administrador (si ya existe como usuario, lo promueve)}
         {--nombre= : Nombre a mostrar — solo se usa si hay que crear el usuario}
-        {--password= : Contraseña — solo se usa si hay que crear el usuario}';
+        {--password= : Contraseña — al crear el usuario, o junto con --reset-password}
+        {--reset-password : Si el usuario ya existe, le asigna una contraseña nueva}';
 
     protected $description = 'Crea o promueve a un usuario como administrador de plataforma (is_admin).';
 
@@ -59,16 +61,36 @@ class CrearAdminCommand extends Command
     }
 
     /**
-     * Camino "el usuario ya existe": no se le tocan ni el nombre ni la
-     * contraseña (para eso están el panel del dueño y el propio usuario) —
-     * si vinieron esas opciones, se avisa que se ignoran en vez de
-     * aplicarlas en silencio.
+     * Camino "el usuario ya existe": no se le toca el nombre, y la
+     * contraseña solo con --reset-password explícito (es la única vía de
+     * recuperar una cuenta admin, no hay mailer). Si vinieron opciones que
+     * no aplican, se avisa que se ignoran en vez de aplicarlas en silencio.
+     *
+     * La contraseña nueva se resuelve y valida ANTES de cualquier escritura:
+     * si es inválida, el comando aborta sin haber restaurado ni promovido a
+     * nadie a medias.
      */
     private function promoverAdmin(User $usuario): int
     {
+        $resetear = (bool) $this->option('reset-password');
+
         foreach (['nombre', 'password'] as $opcion) {
+            if ($opcion === 'password' && $resetear) {
+                continue;
+            }
+
             if ($this->option($opcion) !== null) {
                 $this->warn("--{$opcion} se ignora: el usuario {$usuario->email} ya existe y este comando no le cambia los datos, solo lo promueve a admin.");
+            }
+        }
+
+        $passwordNueva = null;
+
+        if ($resetear) {
+            $passwordNueva = $this->resolverPassword();
+
+            if ($passwordNueva === null) {
+                return self::FAILURE;
             }
         }
 
@@ -98,17 +120,59 @@ class CrearAdminCommand extends Command
                 $this->auditarPromocion($usuario, restaurado: true, yaEraAdmin: true);
             }
 
-            $this->info("{$usuario->email} ya era administrador. No hay nada que hacer.");
+            if ($passwordNueva === null) {
+                $this->info("{$usuario->email} ya era administrador. No hay nada que hacer.");
+            }
+        } else {
+            $this->marcarComoAdmin($usuario);
+            $this->auditarPromocion($usuario, restaurado: $estabaDadoDeBaja, yaEraAdmin: false);
 
-            return self::SUCCESS;
+            $this->info("{$usuario->email} ahora es administrador de plataforma.");
         }
 
-        $this->marcarComoAdmin($usuario);
-        $this->auditarPromocion($usuario, restaurado: $estabaDadoDeBaja, yaEraAdmin: false);
-
-        $this->info("{$usuario->email} ahora es administrador de plataforma.");
+        if ($passwordNueva !== null) {
+            $this->resetearPassword($usuario, $passwordNueva);
+        }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Además de la contraseña, rota el remember_token y borra las sesiones
+     * abiertas del usuario: si se resetea porque la cuenta pudo haberse
+     * comprometido, una sesión o una cookie "recordarme" ya robadas no
+     * tienen que sobrevivir al cambio. Las sesiones solo se pueden cortar
+     * así con el driver `database` (el que usa la app); con otro driver se
+     * avisa en vez de fallar en silencio.
+     */
+    private function resetearPassword(User $usuario, string $password): void
+    {
+        // Texto plano a propósito: el cast 'hashed' lo pasa por Hash::make.
+        $usuario->password = $password;
+        $usuario->setRememberToken(Str::random(60));
+        $usuario->save();
+
+        $sesionesCerradas = null;
+
+        if (config('session.driver') === 'database') {
+            $sesionesCerradas = DB::connection(config('session.connection'))
+                ->table(config('session.table', 'sessions'))
+                ->where('user_id', $usuario->id)
+                ->delete();
+        } else {
+            $this->warn('El driver de sesión no es "database": las sesiones abiertas de este usuario NO se cerraron.');
+        }
+
+        RegistroAuditoria::registrar(
+            RegistroAuditoria::ACCION_ADMIN_PASSWORD_RESETEADA,
+            detalles: [
+                'email' => $usuario->email,
+                'usuario_id' => $usuario->id,
+                'sesiones_cerradas' => $sesionesCerradas,
+            ],
+        );
+
+        $this->info("Contraseña de {$usuario->email} restablecida.");
     }
 
     /**
@@ -193,10 +257,11 @@ class CrearAdminCommand extends Command
      * fuerte que cualquier default razonable.
      *
      * Dónde se valida y dónde no, a propósito: la validación vive acá y no
-     * al principio de handle() porque este método solo corre en el camino
-     * "hay que crear el usuario". Si el usuario YA existe, --password se
-     * ignora (se avisa en promoverAdmin()) y no tendría sentido abortar
-     * una promoción por una opción que no se va a usar.
+     * al principio de handle() porque este método solo corre cuando de
+     * verdad se va a usar la contraseña: al crear el usuario, o al
+     * promover con --reset-password. Sin ese flag, en un usuario existente
+     * --password se ignora (se avisa en promoverAdmin()) y no tendría
+     * sentido abortar una promoción por una opción que no se va a usar.
      *
      * @return string|null null = no se pudo resolver, abortar.
      */
