@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\AnularVentaRequest;
 use App\Http\Requests\VentaRequest;
+use App\Models\Caja;
 use App\Models\Cliente;
 use App\Models\ItemVenta;
 use App\Models\MovimientoStock;
@@ -20,6 +21,8 @@ use Illuminate\View\View;
 
 class VentaController extends Controller
 {
+    public const MENSAJE_CAJA_CERRADA = 'La caja está cerrada. Abrila para empezar a vender.';
+
     /**
      * ?stock_insuficiente=1: usado por el link "Ver ventas" del resumen de
      * ventas offline con stock insuficiente pendientes de revisar en
@@ -60,6 +63,9 @@ class VentaController extends Controller
         return view('ventas.create', [
             'clientes' => Cliente::query()->orderBy('nombre')->get(),
             'productosFrecuentes' => $this->productosFrecuentes(),
+            // Estado al momento de cargar la página (offline queda el último
+            // conocido, cacheado por el SW). El servidor lo re-valida igual.
+            'cajaAbierta' => Caja::abierta() !== null,
         ]);
     }
 
@@ -149,7 +155,7 @@ class VentaController extends Controller
         }
 
         try {
-            $this->crearVenta($data, $uuidDispositivo);
+            $this->crearVenta($data, $uuidDispositivo, ! $request->esSincronizacionDeCola());
         } catch (QueryException $e) {
             if ($uuidDispositivo !== null && str_contains($e->getMessage(), 'uuid_dispositivo')) {
                 return redirect()->route('ventas.index')->with('status', 'Venta registrada correctamente.');
@@ -184,9 +190,18 @@ class VentaController extends Controller
     /**
      * @param  array<string, mixed>  $data
      */
-    private function crearVenta(array $data, ?string $uuidDispositivo): void
+    private function crearVenta(array $data, ?string $uuidDispositivo, bool $exigirCajaAbierta): void
     {
-        DB::transaction(function () use ($data, $uuidDispositivo) {
+        DB::transaction(function () use ($data, $uuidDispositivo, $exigirCajaAbierta) {
+            // Garantía real de "no se vende sin caja abierta" (el pre-check
+            // de VentaRequest es solo UX): lockForUpdate() sobre la caja
+            // abierta serializa contra un cierre concurrente
+            // (CajaController::cerrar() hace UPDATE de esa fila). Se saltea
+            // para ventas que vienen de la cola offline — nunca se rechazan.
+            if ($exigirCajaAbierta && Caja::whereNull('cerrada_en')->lockForUpdate()->first() === null) {
+                throw ValidationException::withMessages(['caja' => self::MENSAJE_CAJA_CERRADA]);
+            }
+
             $productoIds = collect($data['items'])->pluck('producto_id')->unique();
 
             // lockForUpdate() bloquea las filas de estos productos a nivel

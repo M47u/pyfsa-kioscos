@@ -9,6 +9,7 @@ use App\Http\Requests\CerrarCajaRequest;
 use App\Http\Requests\MovimientoCajaRequest;
 use App\Models\Caja;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -68,14 +69,18 @@ class CajaController extends Controller
 
     public function registrarMovimiento(MovimientoCajaRequest $request): RedirectResponse
     {
-        $caja = $this->cajaAbierta();
+        // Mismo lock que cerrar(): un movimiento no puede confirmarse entre
+        // el cálculo del efectivo esperado y el UPDATE de cierre.
+        DB::transaction(function () use ($request) {
+            $caja = $this->cajaAbiertaBloqueada();
 
-        abort_if($caja === null, 404, 'No hay una caja abierta.');
+            abort_if($caja === null, 404, 'No hay una caja abierta.');
 
-        $caja->movimientos()->create([
-            ...$request->validated(),
-            'user_id' => auth()->id(),
-        ]);
+            $caja->movimientos()->create([
+                ...$request->validated(),
+                'user_id' => auth()->id(),
+            ]);
+        });
 
         return redirect()->route('caja.show')->with('status', 'Movimiento registrado correctamente.');
     }
@@ -89,27 +94,44 @@ class CajaController extends Controller
      */
     public function cerrar(CerrarCajaRequest $request): RedirectResponse
     {
-        $caja = $this->cajaAbierta();
+        // Transaccional y con lock: una venta en vuelo toma el MISMO lock
+        // sobre la caja abierta (VentaController::crearVenta), así que o
+        // confirma antes de que acá se calcule el efectivo esperado (y
+        // entra en la cuenta) o espera y ve la caja ya cerrada (y se
+        // rechaza). Sin esto, una venta podía quedar dentro del rango pero
+        // fuera del efectivo_esperado congelado (falso sobrante) o huérfana
+        // si su created_at caía después del cerrada_en. $ahora es único
+        // para que el rango de ventas y cerrada_en coincidan.
+        DB::transaction(function () use ($request) {
+            $caja = $this->cajaAbiertaBloqueada();
 
-        abort_if($caja === null, 404, 'No hay una caja abierta.');
+            abort_if($caja === null, 404, 'No hay una caja abierta.');
 
-        $efectivoEsperado = $caja->efectivoEsperadoActual();
-        $efectivoContado = (float) $request->validated('efectivo_contado');
+            $ahora = now();
+            $caja->cerrada_en = $ahora;
+            $efectivoEsperado = $caja->efectivoEsperadoActual();
+            $efectivoContado = (float) $request->validated('efectivo_contado');
 
-        $caja->update([
-            'cerrada_en' => now(),
-            'efectivo_esperado' => $efectivoEsperado,
-            'efectivo_contado' => $efectivoContado,
-            'diferencia' => $efectivoContado - $efectivoEsperado,
-            'user_id_cierre' => auth()->id(),
-            'observaciones' => $request->validated('observaciones'),
-        ]);
+            $caja->update([
+                'cerrada_en' => $ahora,
+                'efectivo_esperado' => $efectivoEsperado,
+                'efectivo_contado' => $efectivoContado,
+                'diferencia' => $efectivoContado - $efectivoEsperado,
+                'user_id_cierre' => auth()->id(),
+                'observaciones' => $request->validated('observaciones'),
+            ]);
+        });
 
         return redirect()->route('caja.show')->with('status', 'Caja cerrada correctamente.');
     }
 
+    private function cajaAbiertaBloqueada(): ?Caja
+    {
+        return Caja::whereNull('cerrada_en')->latest('abierta_en')->lockForUpdate()->first();
+    }
+
     private function cajaAbierta(): ?Caja
     {
-        return Caja::whereNull('cerrada_en')->latest('abierta_en')->first();
+        return Caja::abierta();
     }
 }

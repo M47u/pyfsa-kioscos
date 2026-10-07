@@ -47,6 +47,16 @@ class Caja extends Model
         ];
     }
 
+    /**
+     * La caja abierta (cerrada_en null), si hay. Punto único de la regla
+     * "no se vende sin caja abierta" (ver VentaRequest/VentaController) y
+     * de CajaController.
+     */
+    public static function abierta(): ?self
+    {
+        return static::whereNull('cerrada_en')->latest('abierta_en')->first();
+    }
+
     public function movimientos(): HasMany
     {
         return $this->hasMany(MovimientoCaja::class);

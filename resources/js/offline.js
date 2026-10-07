@@ -255,7 +255,10 @@ export async function sincronizarPendientes() {
             const response = await fetch(item.action, {
                 method: 'POST',
                 credentials: 'same-origin',
-                headers: { Accept: 'application/json' },
+                // X-Sincronizacion-Cola: marca el reintento desde la cola
+                // (ver VentaRequest::esSincronizacionDeCola): una venta
+                // encolada nunca se rechaza por caja cerrada.
+                headers: { Accept: 'application/json', 'X-Sincronizacion-Cola': '1' },
                 body: armarFormData(item.entradas),
             });
 
@@ -366,7 +369,25 @@ export async function buscarPorCodigoExactoLocal(codigo) {
     return productos.find((producto) => producto.codigo_barras === codigo) ?? null;
 }
 
+/**
+ * Suma (o pisa por id) un producto en el cache local — lo usa el alta rápida
+ * de "Crear artículo nuevo" en ventas/create.blade.php para que una búsqueda
+ * posterior offline lo encuentre sin esperar a la próxima sincronización
+ * completa del catálogo.
+ *
+ * @param {object} producto misma forma que productos.catalogo
+ */
+export async function agregarProductoAlCatalogoLocal(producto) {
+    try {
+        await guardar(STORE_PRODUCTOS, producto);
+    } catch (error) {
+        // El cache es una conveniencia: si falla, la próxima sincronización
+        // completa lo repone. No debe romper el flujo de venta.
+    }
+}
+
 window.offlineSync = {
+    agregarProductoAlCatalogoLocal,
     enviarOEncolar,
     contarPendientes,
     sincronizarPendientes,

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Requests;
 
+use App\Http\Controllers\VentaController;
+use App\Models\Caja;
 use App\Models\Producto;
 use App\Models\Venta;
 use Illuminate\Foundation\Http\FormRequest;
@@ -22,6 +24,21 @@ class VentaRequest extends FormRequest
     public function authorize(): bool
     {
         return true;
+    }
+
+    /**
+     * Header que agrega SOLO sincronizarPendientes() (resources/js/offline.js)
+     * al reintentar una venta de la cola offline. uuid_dispositivo no sirve
+     * para distinguir: el frontend lo manda SIEMPRE, también en el envío en
+     * vivo. Una venta que viene de la cola nunca se rechaza por caja
+     * cerrada (decisión offline, ver CLAUDE.md): el cliente ya se fue con
+     * el producto y la caja pudo cerrarse mientras no había señal.
+     */
+    public const HEADER_SINCRONIZACION_COLA = 'X-Sincronizacion-Cola';
+
+    public function esSincronizacionDeCola(): bool
+    {
+        return $this->header(self::HEADER_SINCRONIZACION_COLA) === '1';
     }
 
     /**
@@ -93,6 +110,13 @@ class VentaRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
+            // Pre-check de UX (la garantía real, con lock, está en
+            // VentaController::crearVenta): no se vende sin caja abierta,
+            // salvo que sea un reintento de la cola offline.
+            if (! $this->esSincronizacionDeCola() && Caja::abierta() === null) {
+                $validator->errors()->add('caja', VentaController::MENSAJE_CAJA_CERRADA);
+            }
+
             if ($this->filled('uuid_dispositivo')) {
                 return;
             }

@@ -122,6 +122,7 @@ class PagoTest extends TenantTestCase
      */
     public function test_venta_fiado_que_supera_el_limite_se_registra_igual_y_deja_advertencia(): void
     {
+        $this->abrirCaja();
         $producto = $this->crearProducto();
         $cliente = Cliente::create(['nombre' => 'Juan Pérez', 'telefono' => null, 'limite_credito' => 1000]);
 

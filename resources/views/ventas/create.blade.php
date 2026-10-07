@@ -81,7 +81,11 @@
             <p id="producto-sin-resultados" hidden class="mt-1 text-xs opacity-70">
                 No se encontró ningún artículo con ese nombre o código.
                 @if (auth()->user()->esDueno())
-                    <a href="#" id="crear-articulo-link" class="underline" target="_blank" rel="noopener">Crear artículo nuevo</a>
+                    {{-- <button>, no <a>: el listener delegado de "salir sin
+                         registrar la venta" (abajo) intercepta TODO <a href>
+                         con el carrito cargado, incluso con target=_blank.
+                         Esto abre el modal de alta rápida, nunca navega. --}}
+                    <button type="button" id="crear-articulo-link" class="underline">Crear artículo nuevo</button>
                 @endif
             </p>
         </div>
@@ -148,7 +152,24 @@
              el rediseño original (el servidor siempre la siguió aceptando,
              ver Venta::MEDIO_PAGO_TRANSFERENCIA) — se suma acá como quinto
              botón, sin tocar backend. --}}
-        <div id="cobro-panel" class="border-t border-[#19140035] dark:border-[#3E3E3A] pt-4 space-y-4">
+        {{-- Sin caja abierta no se puede cobrar (ver VentaController): el
+             panel de cobro queda oculto (sigue en el DOM, el JS lo
+             referencia) y se muestra un aviso con el camino a Caja. La
+             búsqueda y el carrito siguen usables a propósito: el cajero
+             puede ir cargando artículos mientras abre la caja, y el
+             <a> a Caja dispara el aviso de "salir sin registrar la venta"
+             si ya hay items. Offline se usa el último estado conocido
+             (la página la cachea el Service Worker). --}}
+        @unless ($cajaAbierta)
+            <div id="caja-cerrada-aviso" class="border-t border-[#19140035] dark:border-[#3E3E3A] pt-4 space-y-3 text-center">
+                <p class="text-lg font-medium">La caja está cerrada. Abrila para empezar a vender.</p>
+                <a href="{{ route('caja.show') }}" class="block rounded-sm bg-[#1b1b18] dark:bg-[#eeeeec] text-white dark:text-[#1C1C1A] px-5 py-4 text-base font-medium">
+                    Ir a Caja
+                </a>
+            </div>
+        @endunless
+
+        <div id="cobro-panel" @unless ($cajaAbierta) hidden @endunless class="border-t border-[#19140035] dark:border-[#3E3E3A] pt-4 space-y-4">
             <p class="text-sm font-medium">Cobrar (F4)</p>
 
             <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -170,18 +191,28 @@
             </div>
             <input type="hidden" id="medio_pago" name="medio_pago">
 
-            {{-- Solo con "Efectivo": calculadora de vuelto, bloquea
-                 confirmar si el monto ingresado no alcanza. --}}
+            {{-- Solo con "Efectivo": el monto recibido es OBLIGATORIO (bloquea
+                 confirmar si está vacío o no alcanza). "Pago justo" lo llena
+                 con el total exacto de un toque. --}}
             <div id="monto-efectivo-wrapper" hidden>
                 <label for="monto-efectivo-input" class="block text-sm font-medium mb-1">Monto abonado en efectivo</label>
-                <input
-                    type="number"
-                    id="monto-efectivo-input"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    class="w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-2 text-sm"
-                >
+                <div class="flex gap-2">
+                    <input
+                        type="number"
+                        id="monto-efectivo-input"
+                        step="0.01"
+                        min="0"
+                        inputmode="decimal"
+                        placeholder="0.00"
+                        class="flex-1 min-w-0 rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-3 text-sm"
+                    >
+                    <button type="button" id="pago-justo-btn" class="shrink-0 rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC] px-3 py-3 text-sm font-medium">
+                        Pago justo
+                    </button>
+                </div>
+                <p id="monto-faltante-msg" hidden class="mt-1 text-xs opacity-80">
+                    Escribí cuánto te dio el cliente o tocá Pago justo.
+                </p>
                 <p class="mt-1 text-sm">
                     Vuelto: $<span id="vuelto-venta">0.00</span>
                 </p>
@@ -261,10 +292,37 @@
         Si salís ahora, <strong>esta venta no se va a registrar</strong>.
     </x-confirm-dialog>
 
+    {{-- Confirmación previa al cobro (evita ventas hechas por error: un
+         empleado no puede anular, solo el dueño). Fuera del <form> de la
+         venta: es solo UI, el envío real sigue siendo el submit handler de
+         abajo vía enviarOEncolar(). Esc = Volver (cierre nativo). --}}
+    <dialog id="confirmar-cobro-dialog" class="m-auto rounded-sm p-0 backdrop:bg-black/60 bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC]">
+        <div class="p-5 space-y-4 w-full sm:w-[26rem] max-h-[90vh] overflow-y-auto">
+            <p class="text-lg font-medium">¿Confirmás el cobro?</p>
+            <div class="space-y-1">
+                <p class="text-4xl font-semibold">$<span id="cc-total">0.00</span></p>
+                <p class="text-lg"><span id="cc-medio"></span> &middot; <span id="cc-items"></span></p>
+            </div>
+            <div id="cc-efectivo" hidden class="text-lg space-y-1">
+                <p>Recibido: <strong>$<span id="cc-recibido">0.00</span></strong></p>
+                <p>Vuelto: <strong>$<span id="cc-vuelto">0.00</span></strong></p>
+            </div>
+            <p id="cc-cliente-wrapper" hidden class="text-lg">Cliente: <strong id="cc-cliente"></strong></p>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <button type="button" id="cc-confirmar-btn" class="flex-1 rounded-sm bg-[#1b1b18] dark:bg-[#eeeeec] text-white dark:text-[#1C1C1A] px-3 py-3 text-base font-medium">
+                    Sí, cobrar
+                </button>
+                <button type="button" id="cc-volver-btn" class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] px-3 py-3 text-base">
+                    Volver
+                </button>
+            </div>
+        </div>
+    </dialog>
+
     {{-- Modal de escaneo por cámara. <dialog> nativo (no x-confirm-dialog:
          ese componente es para confirmar/cancelar una acción, esto necesita
          un <video> en vivo y su propio ciclo de vida de MediaStream). --}}
-    <dialog id="camara-dialog" class="rounded-sm p-0 backdrop:bg-black/60">
+    <dialog id="camara-dialog" class="m-auto rounded-sm p-0 backdrop:bg-black/60">
         <div class="p-4 space-y-3 w-full sm:w-96">
             <p class="text-sm font-medium">Escaneá un código de barras</p>
             <video id="camara-video" class="w-full rounded-sm bg-black aspect-video" playsinline muted></video>
@@ -274,6 +332,57 @@
             </button>
         </div>
     </dialog>
+
+    {{-- Alta rápida de artículo (dueño-only, igual que productos.store). Está
+         FUERA del <form id="venta-form"> a propósito: son campos sueltos
+         con fetch() a productos.store (Accept: JSON), nunca un submit ni una
+         navegación — así el carrito y el aviso de "salir sin registrar la
+         venta" no se tocan. Mismo patrón que el cliente rápido. --}}
+    @if (auth()->user()->esDueno())
+        <dialog id="nuevo-producto-dialog" class="m-auto rounded-sm p-0 backdrop:bg-black/60 bg-white dark:bg-[#161615] text-[#1b1b18] dark:text-[#EDEDEC]">
+            <div class="p-4 space-y-3 w-full sm:w-96 max-h-[90vh] overflow-y-auto">
+                <p class="text-sm font-medium">Crear artículo nuevo</p>
+                <div>
+                    <label for="np-nombre" class="block text-xs mb-1">Nombre</label>
+                    <input type="text" id="np-nombre" maxlength="255" class="np-campo w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] px-3 py-3 text-sm">
+                </div>
+                <div>
+                    <label for="np-codigo" class="block text-xs mb-1">Código de barras (opcional)</label>
+                    <input type="text" id="np-codigo" maxlength="255" class="np-campo w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] px-3 py-3 text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label for="np-venta" class="block text-xs mb-1">Precio de venta</label>
+                        <input type="number" id="np-venta" step="0.01" min="0.01" inputmode="decimal" class="np-campo w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] px-3 py-3 text-sm">
+                    </div>
+                    <div>
+                        <label for="np-costo" class="block text-xs mb-1">Precio de costo</label>
+                        <input type="number" id="np-costo" step="0.01" min="0" inputmode="decimal" class="np-campo w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] px-3 py-3 text-sm">
+                    </div>
+                </div>
+                <div>
+                    <label class="flex items-center gap-2 text-sm">
+                        <input type="checkbox" id="np-controla-stock">
+                        Controlar stock
+                    </label>
+                    <p class="mt-1 text-xs opacity-70">Podés activarlo después en Artículos si querés llevar el stock.</p>
+                </div>
+                <div id="np-stock-wrapper" hidden>
+                    <label for="np-stock" class="block text-xs mb-1">Stock inicial (unidades)</label>
+                    <input type="number" id="np-stock" min="1" step="1" inputmode="numeric" class="np-campo w-full rounded-sm border border-[#19140035] dark:border-[#3E3E3A] bg-white dark:bg-[#161615] px-3 py-3 text-sm">
+                </div>
+                <div id="np-errores" hidden class="space-y-1 text-xs text-[#F53003] dark:text-[#FF4433]"></div>
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <button type="button" id="np-guardar-btn" class="flex-1 rounded-sm bg-[#1b1b18] dark:bg-[#eeeeec] text-white dark:text-[#1C1C1A] px-3 py-3 text-sm font-medium">
+                        Crear y agregar al carrito
+                    </button>
+                    <button type="button" id="np-cancelar-btn" class="rounded-sm border border-[#19140035] dark:border-[#3E3E3A] px-3 py-3 text-sm">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </dialog>
+    @endif
 
     <script>
         (function () {
@@ -298,6 +407,8 @@
             const montoEfectivoInput = document.getElementById('monto-efectivo-input');
             const vueltoSpan = document.getElementById('vuelto-venta');
             const montoInsuficienteMsg = document.getElementById('monto-insuficiente-msg');
+            const montoFaltanteMsg = document.getElementById('monto-faltante-msg');
+            const pagoJustoBtn = document.getElementById('pago-justo-btn');
             const mostrarNuevoClienteBtn = document.getElementById('mostrar-nuevo-cliente-btn');
             const nuevoClienteForm = document.getElementById('nuevo-cliente-form');
             const nuevoClienteNombre = document.getElementById('nuevo-cliente-nombre');
@@ -314,7 +425,9 @@
             const RUTA_BUSCAR = '{{ route('productos.buscar') }}';
             const RUTA_CATALOGO = '{{ route('productos.catalogo') }}';
             const RUTA_CLIENTES_STORE = '{{ route('clientes.store') }}';
-            const RUTA_PRODUCTOS_CREATE = '{{ route('productos.create') }}';
+            const RUTA_PRODUCTOS_STORE = '{{ route('productos.store') }}';
+
+            const CAJA_ABIERTA = @json($cajaAbierta);
 
             let carrito = [];
             let totalActual = 0;
@@ -377,11 +490,13 @@
                 }
             }
 
+            // Último término buscado/escaneado sin resultado: precarga el
+            // modal de alta rápida (ver más abajo).
+            let ultimoTermSinResultado = '';
+
             function mostrarSinResultados(term) {
                 productoSinResultados.hidden = false;
-                if (crearArticuloLink) {
-                    crearArticuloLink.href = `${RUTA_PRODUCTOS_CREATE}?codigo_barras=${encodeURIComponent(term)}`;
-                }
+                ultimoTermSinResultado = term;
             }
 
             function agregarProducto(producto) {
@@ -521,6 +636,8 @@
 
                 clienteWrapper.hidden = medio !== 'fiado';
                 montoEfectivoWrapper.hidden = medio !== 'efectivo';
+                // Al cambiar de medio (y volver) el monto arranca vacío.
+                montoEfectivoInput.value = '';
 
                 if (!montoEfectivoWrapper.hidden) {
                     actualizarVuelto();
@@ -533,24 +650,43 @@
                 btn.addEventListener('click', () => seleccionarMedioPago(btn.dataset.medio));
             });
 
+            // Montos en centavos enteros: comparar floats directo puede
+            // dar "no alcanza" por 0.1+0.2 != 0.3 aunque el monto sea justo.
+            const centavos = (n) => Math.round(n * 100);
+
             // Vuelto = lo que abona el cliente en efectivo - el total de la
             // venta. Se recalcula acá (input del monto) Y desde render() de
             // abajo (el total cambia cada vez que se agrega/quita un
-            // artículo). Un monto insuficiente BLOQUEA confirmar (ver
-            // actualizarEstadoBoton) — a diferencia de dejarlo vacío, que no
-            // bloquea (el kiosquero puede cobrar "justo" sin escribir nada).
+            // artículo). El monto es OBLIGATORIO en efectivo (decisión del
+            // usuario, 2026-10-05): vacío o insuficiente BLOQUEA confirmar
+            // (ver actualizarEstadoBoton). Es solo un guard de UX: el monto
+            // no viaja al servidor (el input no tiene `name`).
             function actualizarVuelto() {
                 const montoEfectivo = parseFloat(montoEfectivoInput.value);
-                const vuelto = (isNaN(montoEfectivo) ? 0 : montoEfectivo) - totalActual;
-                const insuficiente = montoEfectivoInput.value !== '' && vuelto < 0;
+                const vacio = isNaN(montoEfectivo);
+                const insuficiente = !vacio && centavos(montoEfectivo) < centavos(totalActual);
 
-                vueltoSpan.textContent = vuelto.toFixed(2);
+                vueltoSpan.textContent = (vacio ? 0 : (centavos(montoEfectivo) - centavos(totalActual)) / 100).toFixed(2);
                 vueltoSpan.classList.toggle('text-[#F53003]', insuficiente);
                 vueltoSpan.classList.toggle('dark:text-[#FF4433]', insuficiente);
                 montoInsuficienteMsg.hidden = !insuficiente;
+                montoFaltanteMsg.hidden = !(vacio && carrito.length > 0);
 
                 actualizarEstadoBoton();
             }
+
+            // Un toque: el monto pasa a ser el total exacto (vuelto 0) y el
+            // foco queda en "Confirmar cobro" para Enter -> dialog -> Enter.
+            pagoJustoBtn.addEventListener('click', () => {
+                if (carrito.length === 0) {
+                    return;
+                }
+                montoEfectivoInput.value = totalActual.toFixed(2);
+                actualizarVuelto();
+                if (!registrarBtn.disabled) {
+                    registrarBtn.focus();
+                }
+            });
 
             montoEfectivoInput.addEventListener('input', actualizarVuelto);
             // Enter en este campo debe poder confirmar el cobro (submit
@@ -562,13 +698,12 @@
 
             function actualizarEstadoBoton() {
                 const montoEfectivo = parseFloat(montoEfectivoInput.value);
+                // Efectivo: monto obligatorio (vacío, inválido o menor al total bloquea).
                 const efectivoInsuficiente = medioPagoActual === 'efectivo'
-                    && montoEfectivoInput.value !== ''
-                    && !isNaN(montoEfectivo)
-                    && montoEfectivo < totalActual;
+                    && (isNaN(montoEfectivo) || centavos(montoEfectivo) < centavos(totalActual));
                 const faltaCliente = medioPagoActual === 'fiado' && !clienteSelect.value;
 
-                registrarBtn.disabled = carrito.length === 0 || !medioPagoActual || efectivoInsuficiente || faltaCliente;
+                registrarBtn.disabled = !CAJA_ABIERTA || carrito.length === 0 || !medioPagoActual || efectivoInsuficiente || faltaCliente;
             }
 
             // ---- Cliente rápido (alta sin salir de la pantalla de venta) ----
@@ -637,6 +772,199 @@
             }
 
             crearClienteBtn.addEventListener('click', crearClienteRapido);
+
+            // ---- Alta rápida de artículo (dueño-only) ----
+            // El <dialog> solo existe en el DOM si el usuario es dueño
+            // (ver arriba); productos.store además queda protegido en el
+            // servidor por EnsureUserIsDueno. Nunca navega: fetch() JSON y
+            // el producto creado entra al carrito actual tal cual está.
+            const nuevoProductoDialog = document.getElementById('nuevo-producto-dialog');
+
+            if (crearArticuloLink && nuevoProductoDialog) {
+                const npNombre = document.getElementById('np-nombre');
+                const npCodigo = document.getElementById('np-codigo');
+                const npCosto = document.getElementById('np-costo');
+                const npVenta = document.getElementById('np-venta');
+                const npControlaStock = document.getElementById('np-controla-stock');
+                const npStockWrapper = document.getElementById('np-stock-wrapper');
+                const npStock = document.getElementById('np-stock');
+                const npErrores = document.getElementById('np-errores');
+                const npGuardarBtn = document.getElementById('np-guardar-btn');
+                const npCancelarBtn = document.getElementById('np-cancelar-btn');
+                const CLASES_ERROR = ['border-[#F53003]', 'dark:border-[#FF4433]'];
+                // Por campo, en el orden visual del modal (el foco va al primero).
+                const npCampos = { nombre: npNombre, codigo_barras: npCodigo, precio_venta: npVenta, precio_costo: npCosto, stock_inicial: npStock };
+                const MSG_STOCK = 'Poné cuántas unidades tenés. Si no, no vas a poder venderlo.';
+
+                function limpiarErroresNuevoProducto() {
+                    npErrores.hidden = true;
+                    npErrores.innerHTML = '';
+                    Object.values(npCampos).forEach((el) => el.classList.remove(...CLASES_ERROR));
+                }
+
+                // errores: { campo: mensaje, general?: mensaje }. Una línea
+                // por error, marca el input y enfoca el primero.
+                function mostrarErroresNuevoProducto(errores) {
+                    limpiarErroresNuevoProducto();
+                    npErrores.hidden = false;
+                    let primero = null;
+                    Object.entries(npCampos).forEach(([campo, el]) => {
+                        if (!errores[campo]) {
+                            return;
+                        }
+                        const linea = document.createElement('p');
+                        linea.textContent = errores[campo];
+                        npErrores.appendChild(linea);
+                        el.classList.add(...CLASES_ERROR);
+                        primero = primero ?? el;
+                    });
+                    if (errores.general) {
+                        const linea = document.createElement('p');
+                        linea.textContent = errores.general;
+                        npErrores.appendChild(linea);
+                    }
+                    if (primero) {
+                        primero.focus();
+                    }
+                }
+
+                function abrirNuevoProducto() {
+                    npNombre.value = '';
+                    npCodigo.value = '';
+                    npCosto.value = '';
+                    npVenta.value = '';
+                    npStock.value = '';
+                    npControlaStock.checked = false;
+                    npStockWrapper.hidden = true;
+                    limpiarErroresNuevoProducto();
+
+                    // Un código (solo dígitos) precarga el código de
+                    // barras; texto libre precarga el nombre.
+                    if (/^\d{4,}$/.test(ultimoTermSinResultado)) {
+                        npCodigo.value = ultimoTermSinResultado;
+                    } else {
+                        npNombre.value = ultimoTermSinResultado;
+                    }
+
+                    nuevoProductoDialog.showModal();
+                    (npNombre.value === '' ? npNombre : npVenta).focus();
+                }
+
+                // Mensajes en español por campo (la validación del servidor
+                // sigue en inglés, otra ronda): se mapea por campo, no se
+                // vuelca el texto del servidor.
+                function traducirErrores(errores) {
+                    const out = {};
+                    if (errores.nombre) {
+                        out.nombre = 'Escribí el nombre del artículo.';
+                    }
+                    if (errores.codigo_barras) {
+                        out.codigo_barras = 'Ese código ya está cargado en otro artículo. Buscalo por nombre.';
+                    }
+                    if (errores.precio_venta) {
+                        out.precio_venta = npVenta.value !== '' && Number(npVenta.value) <= 0
+                            ? 'El precio de venta tiene que ser mayor a 0'
+                            : 'Poné el precio de venta.';
+                    }
+                    if (errores.precio_costo) {
+                        out.precio_costo = 'Poné el precio de costo.';
+                    }
+                    if (errores.stock_inicial) {
+                        out.stock_inicial = MSG_STOCK;
+                    }
+                    return out;
+                }
+
+                async function guardarNuevoProducto() {
+                    if (npGuardarBtn.disabled) {
+                        return;
+                    }
+                    limpiarErroresNuevoProducto();
+
+                    // Con "Controlar stock" tildado nunca se manda 0 en
+                    // silencio: el producto quedaría invendible.
+                    if (npControlaStock.checked && !(parseInt(npStock.value, 10) >= 1)) {
+                        mostrarErroresNuevoProducto({ stock_inicial: MSG_STOCK });
+                        return;
+                    }
+
+                    npGuardarBtn.disabled = true;
+
+                    // controla_stock va SIEMPRE explícito: un JSON sin el
+                    // campo se normaliza a false (ver ProductoRequest::
+                    // prepareForValidation()).
+                    const cuerpo = {
+                        nombre: npNombre.value.trim(),
+                        codigo_barras: npCodigo.value.trim() || null,
+                        precio_costo: npCosto.value,
+                        precio_venta: npVenta.value,
+                        controla_stock: npControlaStock.checked,
+                        stock_inicial: npControlaStock.checked ? parseInt(npStock.value, 10) : 0,
+                    };
+
+                    try {
+                        const respuesta = await fetch(RUTA_PRODUCTOS_STORE, {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: {
+                                Accept: 'application/json',
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': ventaForm.querySelector('input[name="_token"]').value,
+                            },
+                            body: JSON.stringify(cuerpo),
+                        });
+
+                        if (!respuesta.ok) {
+                            const GENERICO = { general: 'No se pudo crear el artículo. Probá de nuevo.' };
+                            if (respuesta.status === 422) {
+                                const datos = await respuesta.json().catch(() => null);
+                                const traducidos = traducirErrores((datos && datos.errors) || {});
+                                mostrarErroresNuevoProducto(Object.keys(traducidos).length ? traducidos : GENERICO);
+                            } else if (respuesta.status === 419 || respuesta.status === 401) {
+                                mostrarErroresNuevoProducto({ general: 'Se cerró tu sesión. Recargá la página (perdés el carrito) o terminá esta venta y volvé a entrar.' });
+                            } else {
+                                mostrarErroresNuevoProducto(GENERICO);
+                            }
+                            return;
+                        }
+
+                        const producto = await respuesta.json();
+
+                        // Que una búsqueda posterior offline lo encuentre.
+                        if (window.offlineSync) {
+                            window.offlineSync.agregarProductoAlCatalogoLocal(producto);
+                        }
+
+                        nuevoProductoDialog.close();
+                        // Cantidad 1 al agregar: el input de cantidad puede
+                        // tener otro valor tipeado antes de buscar.
+                        cantidadInput.value = 1;
+                        agregarProducto(producto);
+                    } catch (error) {
+                        mostrarErroresNuevoProducto({ general: 'Sin conexión: no se puede crear el artículo ahora. Cobrá lo demás y cargalo después.' });
+                    } finally {
+                        npGuardarBtn.disabled = false;
+                    }
+                }
+
+                crearArticuloLink.addEventListener('click', abrirNuevoProducto);
+                npGuardarBtn.addEventListener('click', guardarNuevoProducto);
+                npCancelarBtn.addEventListener('click', () => nuevoProductoDialog.close());
+                npControlaStock.addEventListener('change', () => {
+                    npStockWrapper.hidden = !npControlaStock.checked;
+                    if (npControlaStock.checked) {
+                        npStock.focus();
+                    }
+                });
+                nuevoProductoDialog.querySelectorAll('.np-campo').forEach((input) => {
+                    input.addEventListener('keydown', (event) => {
+                        if (event.key === 'Enter') {
+                            event.preventDefault(); // nunca submit de la venta
+                            guardarNuevoProducto();
+                        }
+                    });
+                });
+            }
 
             [nuevoClienteNombre, nuevoClienteTelefono].forEach((input) => {
                 input.addEventListener('keydown', (event) => {
@@ -803,6 +1131,18 @@
             }
 
             document.addEventListener('keydown', (event) => {
+                // Con el modal de alta rápida abierto, los atajos de la
+                // venta (F2/F4/Esc) no deben actuar por detrás; Esc lo
+                // cierra el <dialog> nativo.
+                const modalProducto = document.getElementById('nuevo-producto-dialog');
+                const modalCobro = document.getElementById('confirmar-cobro-dialog');
+                if ((modalProducto && modalProducto.open) || (modalCobro && modalCobro.open)) {
+                    if (event.key === 'F2' || event.key === 'F4') {
+                        event.preventDefault();
+                    }
+                    return;
+                }
+
                 if (event.key === 'F2') {
                     event.preventDefault();
                     productoSearch.focus();
@@ -814,6 +1154,8 @@
                     event.preventDefault();
                     if (!registrarBtn.disabled) {
                         ventaForm.requestSubmit();
+                    } else if (!CAJA_ABIERTA) {
+                        document.getElementById('caja-cerrada-aviso')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     } else if (carrito.length > 0) {
                         document.getElementById('cobro-panel').scrollIntoView({ behavior: 'smooth', block: 'center' });
                         medioPagoBotones[0].focus();
@@ -967,9 +1309,11 @@
             };
 
             function mostrarFeedback(tipo, mensaje) {
-                ventaFeedback.className = `mb-4 rounded-sm border px-4 py-3 text-sm ${CLASES_FEEDBACK[tipo]}`;
+                ventaFeedback.className = `mb-4 rounded-sm border px-4 py-4 text-lg font-medium ${CLASES_FEEDBACK[tipo]}`;
                 ventaFeedback.textContent = mensaje;
                 ventaFeedback.hidden = false;
+                // Visible aunque el cajero haya scrolleado al panel de cobro.
+                ventaFeedback.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
 
             // Vacía el carrito (y el uuid_dispositivo ya usado, para que la
@@ -989,29 +1333,101 @@
                 nuevoClienteForm.hidden = true;
                 render();
                 seleccionarMedioPago('efectivo');
-                productoSearch.focus();
+                // preventScroll: que el foco no pise el scroll al mensaje de éxito.
+                productoSearch.focus({ preventScroll: true });
             }
 
-            ventaForm.addEventListener('submit', async (event) => {
+            // Confirmación previa (ver #confirmar-cobro-dialog): TODO camino
+            // que antes enviaba la venta (botón, F4 -> requestSubmit(), Enter
+            // en el monto) cae en este submit; acá solo se abre el dialog.
+            // El envío real corre recién al confirmar (procesarVenta()).
+            const ETIQUETAS_MEDIO_PAGO = @json(\App\Models\Venta::ETIQUETAS_MEDIO_PAGO);
+            const confirmarCobroDialog = document.getElementById('confirmar-cobro-dialog');
+            const ccConfirmarBtn = document.getElementById('cc-confirmar-btn');
+            const ccVolverBtn = document.getElementById('cc-volver-btn');
+            let ventaEnVuelo = false;
+
+            ventaForm.addEventListener('submit', (event) => {
                 event.preventDefault();
 
-                if (carrito.length === 0 || registrarBtn.disabled) {
+                if (carrito.length === 0 || registrarBtn.disabled || ventaEnVuelo || confirmarCobroDialog.open) {
                     return;
                 }
+
+                const unidades = carrito.reduce((suma, item) => suma + item.cantidad, 0);
+                const montoEfectivo = parseFloat(montoEfectivoInput.value);
+                const esEfectivo = medioPagoActual === 'efectivo';
+
+                document.getElementById('cc-total').textContent = totalActual.toFixed(2);
+                document.getElementById('cc-medio').textContent = ETIQUETAS_MEDIO_PAGO[medioPagoActual] ?? medioPagoActual;
+                document.getElementById('cc-items').textContent = `${unidades} ${unidades === 1 ? 'artículo' : 'artículos'}`;
+
+                // En efectivo el monto es obligatorio: el botón ya garantiza
+                // que acá es un número que cubre el total.
+                const recibido = montoEfectivo;
+                document.getElementById('cc-efectivo').hidden = !esEfectivo;
+                document.getElementById('cc-recibido').textContent = esEfectivo ? recibido.toFixed(2) : '';
+                document.getElementById('cc-vuelto').textContent = esEfectivo ? ((centavos(recibido) - centavos(totalActual)) / 100).toFixed(2) : '0.00';
+
+                const esFiado = medioPagoActual === 'fiado';
+                document.getElementById('cc-cliente-wrapper').hidden = !esFiado;
+                if (esFiado) {
+                    document.getElementById('cc-cliente').textContent = clienteSelect.selectedOptions[0]?.textContent ?? '';
+                }
+
+                confirmarCobroDialog.showModal();
+                ccConfirmarBtn.focus();
+            });
+
+            ccVolverBtn.addEventListener('click', () => confirmarCobroDialog.close());
+
+            ccConfirmarBtn.addEventListener('click', () => {
+                // Guard doble Enter / doble click: el flag se prende de forma
+                // síncrona, antes del primer await.
+                if (ventaEnVuelo) {
+                    return;
+                }
+                confirmarCobroDialog.close();
+                procesarVenta();
+            });
+
+            // Mensaje de éxito grande, con el total cobrado y el vuelto en
+            // efectivo (si el monto recibido quedó vacío fue cobro "justo").
+            function mensajeExito(total, medio, recibido) {
+                let texto = `Venta registrada: $${total.toFixed(2)}`;
+                if (medio === 'efectivo' && centavos(recibido) > centavos(total)) {
+                    texto += ` — Vuelto: $${((centavos(recibido) - centavos(total)) / 100).toFixed(2)}`;
+                }
+                return texto;
+            }
+
+            async function procesarVenta() {
+                if (carrito.length === 0 || registrarBtn.disabled || ventaEnVuelo) {
+                    return;
+                }
+
+                ventaEnVuelo = true;
+
+                // Datos para el mensaje de éxito: se capturan ANTES de
+                // resetear el carrito.
+                const totalCobrado = totalActual;
+                const montoRecibido = parseFloat(montoEfectivoInput.value);
+                const medioCobrado = medioPagoActual;
 
                 registrarBtn.disabled = true;
                 ventaFeedback.hidden = true;
 
                 const resultado = await window.offlineSync.enviarOEncolar(ventaForm, 'venta');
+                ventaEnVuelo = false;
 
                 if (resultado.estado === 'enviada') {
-                    mostrarFeedback('exito', 'Venta registrada correctamente.');
+                    mostrarFeedback('exito', mensajeExito(totalCobrado, medioCobrado, montoRecibido));
                     resetearParaProximaVenta();
                     return;
                 }
 
                 if (resultado.estado === 'encolada') {
-                    mostrarFeedback('advertencia', 'Venta guardada localmente, se va a sincronizar sola cuando vuelva la conexión.');
+                    mostrarFeedback('advertencia', `Venta de $${totalCobrado.toFixed(2)} guardada localmente, se va a sincronizar sola cuando vuelva la conexión.`);
                     resetearParaProximaVenta();
                     return;
                 }
@@ -1032,7 +1448,7 @@
 
                 mostrarFeedback('error', mensaje);
                 actualizarEstadoBoton();
-            });
+            }
 
             // Avisar antes de perder una venta a medio cargar. Dos capas,
             // porque no hay una sola API que cubra todas las formas de

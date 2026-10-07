@@ -34,6 +34,10 @@ class ReporteTest extends TenantTestCase
         parent::setUp();
 
         Carbon::setTestNow(Carbon::parse(self::MIERCOLES));
+
+        // Después de congelar el reloj: abierta_en queda coherente con las
+        // fechas de las ventas del test.
+        $this->abrirCaja();
     }
 
     protected function tearDown(): void

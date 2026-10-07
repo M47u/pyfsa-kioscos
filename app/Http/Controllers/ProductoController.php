@@ -159,7 +159,7 @@ class ProductoController extends Controller
      * (mismo mecanismo que reponerStock), para no romper la regla de que el
      * stock nunca se guarda ni edita directo — ver Producto::stockActual().
      */
-    public function store(ProductoRequest $request): RedirectResponse
+    public function store(ProductoRequest $request): RedirectResponse|JsonResponse
     {
         $producto = Producto::create($request->safe()->except('stock_inicial'));
 
@@ -171,6 +171,14 @@ class ProductoController extends Controller
                 'cantidad' => $stockInicial,
                 'user_id' => auth()->id(),
             ]);
+        }
+
+        // Alta rápida desde /ventas/create (modal "Crear artículo nuevo"):
+        // mismo criterio que ClienteController::store() — con Accept: JSON
+        // devuelve el producto creado (misma forma que buscar()/catalogo(),
+        // para poder agregarlo al carrito y al cache local tal cual).
+        if ($request->wantsJson()) {
+            return response()->json($this->comoJson($producto), 201);
         }
 
         return redirect()->route('productos.index')->with('status', 'Artículo creado correctamente.');

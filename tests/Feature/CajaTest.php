@@ -155,4 +155,56 @@ class CajaTest extends TenantTestCase
 
         $this->assertNotNull(Caja::first()->cerrada_en);
     }
+
+    /**
+     * cerrar() es transaccional y toma lockForUpdate() sobre la caja
+     * abierta ANTES de calcular el efectivo esperado: si otra conexión
+     * (una venta en vuelo) sostiene ese lock sin confirmar, el cierre
+     * espera (Lock wait timeout con innodb_lock_wait_timeout=1) en vez de
+     * congelar un efectivo esperado sin esa venta.
+     */
+    public function test_cerrar_caja_espera_el_lock_de_una_venta_en_vuelo(): void
+    {
+        $caja = $this->abrirCaja();
+
+        $config = config('database.connections.tenant');
+        $segundaConexion = new \PDO(
+            "mysql:host={$config['host']};port={$config['port']};dbname={$config['database']};charset=utf8mb4",
+            $config['username'],
+            $config['password']
+        );
+        $segundaConexion->exec('SET SESSION innodb_lock_wait_timeout = 1');
+        $segundaConexion->beginTransaction();
+        $segundaConexion->query('SELECT id FROM cajas WHERE cerrada_en IS NULL FOR UPDATE');
+
+        \Illuminate\Support\Facades\DB::statement('SET SESSION innodb_lock_wait_timeout = 1');
+        $this->withoutExceptionHandling();
+
+        try {
+            $this->expectExceptionMessageMatches('/Lock wait timeout/i');
+
+            $this->actingAs($this->user)->post(route('caja.cerrar'), ['efectivo_contado' => 0]);
+        } finally {
+            $segundaConexion->rollBack();
+        }
+
+        $this->assertNull($caja->fresh()->cerrada_en);
+    }
+
+    /**
+     * Regresión de middleware: abrir caja sin la tenancy pre-inicializada
+     * (el middleware real la inicializa; Caja es un modelo de tenant).
+     */
+    public function test_abrir_caja_funciona_sin_tenancy_pre_inicializada(): void
+    {
+        tenancy()->end();
+
+        $this->actingAs($this->user)->post(route('caja.abrir'), ['monto_apertura' => 500])
+            ->assertRedirect(route('caja.show'))
+            ->assertSessionHasNoErrors();
+
+        tenancy()->initialize($this->comercio);
+
+        $this->assertSame(1, Caja::whereNull('cerrada_en')->count());
+    }
 }

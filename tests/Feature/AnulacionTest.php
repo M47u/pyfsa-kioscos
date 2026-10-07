@@ -20,6 +20,13 @@ use Illuminate\Support\Carbon;
  */
 class AnulacionTest extends TenantTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->abrirCaja();
+    }
+
     private function crearProducto(int $precioVenta = 1200): Producto
     {
         $producto = Producto::create([

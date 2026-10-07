@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\Caja;
 use App\Models\Comercio;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -89,6 +90,21 @@ abstract class TenantTestCase extends TestCase
 
             throw $e;
         }
+    }
+
+    /**
+     * Desde que no se puede vender sin caja abierta (ver
+     * VentaController::crearVenta), los tests que registran ventas por
+     * HTTP abren una caja primero. Helper opt-in a propósito: CajaTest
+     * necesita arrancar sin caja.
+     */
+    protected function abrirCaja(): Caja
+    {
+        return Caja::create([
+            'abierta_en' => now(),
+            'monto_apertura' => 0,
+            'user_id_apertura' => $this->user->id,
+        ]);
     }
 
     protected function tearDown(): void

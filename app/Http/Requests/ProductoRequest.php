@@ -60,6 +60,13 @@ class ProductoRequest extends FormRequest
      *
      * @return array<string, mixed>
      */
+    public function messages(): array
+    {
+        return [
+            'precio_venta.min' => 'El precio de venta tiene que ser mayor a 0',
+        ];
+    }
+
     public static function reglas(mixed $productoAIgnorar = null): array
     {
         return [
@@ -70,8 +77,14 @@ class ProductoRequest extends FormRequest
                 'max:255',
                 Rule::unique('productos', 'codigo_barras')->ignore($productoAIgnorar),
             ],
-            'precio_costo' => ['required', 'numeric', 'min:0'],
-            'precio_venta' => ['required', 'numeric', 'min:0'],
+            // Tope = decimal(10,2) de la columna (ver migración de
+            // productos): sin max, un valor enorme explotaba en la DB (500)
+            // en vez de dar un error de validación.
+            'precio_costo' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
+            // > 0: un artículo a $0 no tiene sentido vendible y es casi
+            // seguro un error de tipeo. Aplica a alta, edición, CSV y modal
+            // (ningún test/plantilla existente usa precio de venta 0).
+            'precio_venta' => ['required', 'numeric', 'min:0.01', 'max:99999999.99'],
             'stock_minimo' => ['nullable', 'integer', 'min:0'],
             // Control de stock opcional (ver Producto::bajoMinimo() y
             // VentaController::crearVenta): default true vía
@@ -82,7 +95,7 @@ class ProductoRequest extends FormRequest
             // Solo se usa en el alta (ver ProductoController::store). No es
             // columna de `productos` — genera un MovimientoStock de
             // reposición, porque el stock nunca se guarda directo.
-            'stock_inicial' => ['nullable', 'integer', 'min:0'],
+            'stock_inicial' => ['nullable', 'integer', 'min:0', 'max:1000000'],
         ];
     }
 }

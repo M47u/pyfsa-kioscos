@@ -99,12 +99,21 @@ class RolTest extends TenantTestCase
         $this->actingAs($empleado)->get(route('caja.show'))->assertOk();
 
         $this->actingAs($empleado)->get(route('ventas.index'))->assertOk();
+        // Sin caja abierta la venta se rechaza (ver VentaController). Antes
+        // este test pasaba igual por un falso verde: el redirect-back de la
+        // validación fallida iba a la página anterior (ventas.index) y
+        // assertRedirect no distinguía. Ahora se abre la caja y se
+        // verifica que la venta de verdad se creó.
+        $this->abrirCaja();
+
         $this->actingAs($empleado)->post(route('ventas.store'), [
             'medio_pago' => 'efectivo',
             'items' => [
                 ['producto_id' => $producto->id, 'cantidad' => 2],
             ],
-        ])->assertRedirect(route('ventas.index'));
+        ])->assertRedirect(route('ventas.index'))->assertSessionHasNoErrors();
+
+        $this->assertSame(1, Venta::where('user_id', $empleado->id)->count());
 
         $this->actingAs($empleado)->get(route('clientes.index'))->assertOk();
         $this->actingAs($empleado)->get(route('clientes.show', $cliente))->assertOk();

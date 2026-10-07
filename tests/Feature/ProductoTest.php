@@ -466,4 +466,128 @@ class ProductoTest extends TenantTestCase
             'controla_stock' => false,
         ]);
     }
+
+    /**
+     * Alta rápida desde /ventas/create (modal "Crear artículo nuevo"): con
+     * Accept: application/json responde 201 con el producto creado en vez
+     * de redirigir, y el stock inicial se traduce en una reposición.
+     */
+    public function test_alta_json_devuelve_201_con_el_producto_y_crea_la_reposicion(): void
+    {
+        $response = $this->actingAs($this->user)->postJson(route('productos.store'), [
+            'nombre' => 'Alfajor Triple',
+            'codigo_barras' => '7791234500001',
+            'precio_costo' => 300,
+            'precio_venta' => 500,
+            'controla_stock' => true,
+            'stock_inicial' => 12,
+        ]);
+
+        $response->assertCreated();
+        $response->assertJson([
+            'nombre' => 'Alfajor Triple',
+            'codigo_barras' => '7791234500001',
+            'precio_venta' => 500,
+            'controla_stock' => true,
+        ]);
+
+        $producto = Producto::where('codigo_barras', '7791234500001')->firstOrFail();
+        $this->assertSame($producto->id, $response->json('id'));
+        $this->assertSame(12, $producto->stockActual());
+        $this->assertDatabaseHas('movimientos_stock', [
+            'producto_id' => $producto->id,
+            'tipo' => MovimientoStock::TIPO_REPOSICION,
+            'cantidad' => 12,
+        ]);
+    }
+
+    public function test_alta_json_invalida_devuelve_422_con_errores(): void
+    {
+        $response = $this->actingAs($this->user)->postJson(route('productos.store'), [
+            'nombre' => '',
+            'precio_costo' => 'abc',
+            'precio_venta' => 100,
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['nombre', 'precio_costo']);
+        $this->assertSame(0, Producto::count());
+    }
+
+    public function test_alta_json_con_codigo_de_barras_repetido_devuelve_422(): void
+    {
+        Producto::create([
+            'nombre' => 'Existente',
+            'codigo_barras' => '123456',
+            'precio_costo' => 1,
+            'precio_venta' => 2,
+        ]);
+
+        $this->actingAs($this->user)->postJson(route('productos.store'), [
+            'nombre' => 'Otro',
+            'codigo_barras' => '123456',
+            'precio_costo' => 1,
+            'precio_venta' => 2,
+        ])->assertStatus(422)->assertJsonValidationErrors(['codigo_barras']);
+    }
+
+    /**
+     * El alta rápida solo se ofrece al dueño (el modal y el botón ni
+     * existen en el HTML del empleado), y ya no es un link a otra página.
+     */
+    public function test_pantalla_de_venta_ofrece_alta_rapida_solo_al_dueno(): void
+    {
+        $this->actingAs($this->user)->get(route('ventas.create'))
+            ->assertOk()
+            ->assertSee('id="nuevo-producto-dialog"', false)
+            ->assertDontSee('productos/create?codigo_barras', false);
+
+        $empleado = \App\Models\User::factory()->create([
+            'comercio_id' => $this->comercio->id,
+            'rol' => \App\Models\User::ROL_EMPLEADO,
+        ]);
+
+        $this->actingAs($empleado)->get(route('ventas.create'))
+            ->assertOk()
+            ->assertDontSee('id="nuevo-producto-dialog"', false)
+            ->assertDontSee('id="crear-articulo-link"', false);
+    }
+
+    public function test_alta_json_rechaza_precio_de_venta_cero_y_valores_fuera_de_rango(): void
+    {
+        $this->actingAs($this->user)->postJson(route('productos.store'), [
+            'nombre' => 'X',
+            'precio_costo' => 100000000,
+            'precio_venta' => 0,
+            'controla_stock' => true,
+            'stock_inicial' => 1000001,
+        ])->assertStatus(422)->assertJsonValidationErrors(['precio_costo', 'precio_venta', 'stock_inicial']);
+
+        $this->assertSame(0, Producto::count());
+    }
+
+    public function test_alta_json_acepta_el_tope_de_precio(): void
+    {
+        $this->actingAs($this->user)->postJson(route('productos.store'), [
+            'nombre' => 'Tope',
+            'precio_costo' => 99999999.99,
+            'precio_venta' => 99999999.99,
+        ])->assertCreated();
+    }
+
+    public function test_empleado_recibe_403_al_crear_producto_por_json(): void
+    {
+        $empleado = \App\Models\User::factory()->create([
+            'comercio_id' => $this->comercio->id,
+            'rol' => \App\Models\User::ROL_EMPLEADO,
+        ]);
+
+        $this->actingAs($empleado)->postJson(route('productos.store'), [
+            'nombre' => 'No debería crearse',
+            'precio_costo' => 1,
+            'precio_venta' => 2,
+        ])->assertForbidden();
+
+        $this->assertSame(0, Producto::count());
+    }
 }

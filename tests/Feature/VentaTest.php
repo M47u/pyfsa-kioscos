@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Models\Caja;
 use App\Models\Cliente;
 use App\Models\MovimientoStock;
 use App\Models\Producto;
@@ -14,6 +15,13 @@ use PDO;
 
 class VentaTest extends TenantTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->abrirCaja();
+    }
+
     private function crearProducto(int $precioVenta = 1200, bool $controlaStock = true): Producto
     {
         $producto = Producto::create([
@@ -445,5 +453,126 @@ class VentaTest extends TenantTestCase
             'sincronizada_con_stock_insuficiente' => false,
         ]);
         $this->assertSame(-5, $producto->fresh()->stockActual());
+    }
+
+    /**
+     * Sin caja abierta no se vende (online): se rechaza con un mensaje
+     * claro y no se crea nada (ni venta ni movimiento de stock).
+     */
+    public function test_venta_online_sin_caja_abierta_se_rechaza_y_no_crea_nada(): void
+    {
+        $producto = $this->crearProducto();
+        Caja::query()->update(['cerrada_en' => now()]);
+
+        $this->actingAs($this->user)->post(route('ventas.store'), [
+            'medio_pago' => Venta::MEDIO_PAGO_EFECTIVO,
+            'items' => [['producto_id' => $producto->id, 'cantidad' => 1]],
+            'uuid_dispositivo' => '44444444-4444-4444-8444-444444444444',
+        ])->assertSessionHasErrors(['caja' => 'La caja está cerrada. Abrila para empezar a vender.']);
+
+        $this->assertSame(0, Venta::count());
+        $this->assertSame(20, $producto->stockActual());
+    }
+
+    public function test_venta_online_con_caja_abierta_se_crea(): void
+    {
+        $producto = $this->crearProducto();
+
+        $this->actingAs($this->user)->post(route('ventas.store'), [
+            'medio_pago' => Venta::MEDIO_PAGO_EFECTIVO,
+            'items' => [['producto_id' => $producto->id, 'cantidad' => 1]],
+            'uuid_dispositivo' => '55555555-5555-4555-8555-555555555555',
+        ])->assertRedirect(route('ventas.index'));
+
+        $this->assertSame(1, Venta::count());
+    }
+
+    /**
+     * Regresión de la decisión offline: una venta que llega de la cola
+     * (header X-Sincronizacion-Cola) NUNCA se rechaza, aunque la caja ya
+     * esté cerrada. Sin el header, la misma request sí se rechaza.
+     */
+    public function test_sincronizacion_de_cola_sin_caja_abierta_se_crea(): void
+    {
+        $producto = $this->crearProducto();
+        Caja::query()->update(['cerrada_en' => now()]);
+
+        $this->actingAs($this->user)->withHeader('X-Sincronizacion-Cola', '1')->post(route('ventas.store'), [
+            'medio_pago' => Venta::MEDIO_PAGO_EFECTIVO,
+            'items' => [['producto_id' => $producto->id, 'cantidad' => 1]],
+            'uuid_dispositivo' => '66666666-6666-4666-8666-666666666666',
+        ])->assertRedirect(route('ventas.index'));
+
+        $this->assertSame(1, Venta::where('uuid_dispositivo', '66666666-6666-4666-8666-666666666666')->count());
+    }
+
+    public function test_pantalla_de_venta_avisa_si_no_hay_caja_abierta(): void
+    {
+        $this->actingAs($this->user)->get(route('ventas.create'))
+            ->assertOk()
+            ->assertDontSee('id="caja-cerrada-aviso"', false);
+
+        Caja::query()->update(['cerrada_en' => now()]);
+
+        $this->actingAs($this->user)->get(route('ventas.create'))
+            ->assertOk()
+            ->assertSee('id="caja-cerrada-aviso"', false)
+            ->assertSee('La caja está cerrada. Abrila para empezar a vender.');
+    }
+
+    /**
+     * Garantía real de "no se vende sin caja abierta": otra conexión (p. ej.
+     * un cierre de caja en curso) sostiene el lock sobre la caja abierta sin
+     * confirmar — la venta tiene que ESPERAR (acá: Lock wait timeout con
+     * innodb_lock_wait_timeout=1), no pasar de largo.
+     */
+    public function test_venta_espera_el_lock_de_la_caja_abierta_de_otra_conexion(): void
+    {
+        $producto = $this->crearProducto();
+
+        $config = config('database.connections.tenant');
+        $segundaConexion = new PDO(
+            "mysql:host={$config['host']};port={$config['port']};dbname={$config['database']};charset=utf8mb4",
+            $config['username'],
+            $config['password']
+        );
+        $segundaConexion->exec('SET SESSION innodb_lock_wait_timeout = 1');
+        $segundaConexion->beginTransaction();
+        $segundaConexion->query('SELECT id FROM cajas WHERE cerrada_en IS NULL FOR UPDATE');
+
+        DB::statement('SET SESSION innodb_lock_wait_timeout = 1');
+        $this->withoutExceptionHandling();
+
+        try {
+            $this->expectExceptionMessageMatches('/Lock wait timeout/i');
+
+            $this->actingAs($this->user)->post(route('ventas.store'), [
+                'medio_pago' => 'efectivo',
+                'items' => [['producto_id' => $producto->id, 'cantidad' => 1]],
+            ]);
+        } finally {
+            $segundaConexion->rollBack();
+        }
+    }
+
+    /**
+     * Regresión de binding/middleware (mismo patrón que PagoTest): sin la
+     * tenancy pre-inicializada, el middleware real la inicializa antes de
+     * que Caja::abierta() consulte la base del tenant.
+     */
+    public function test_venta_con_caja_abierta_funciona_sin_tenancy_pre_inicializada(): void
+    {
+        $producto = $this->crearProducto();
+
+        tenancy()->end();
+
+        $this->actingAs($this->user)->post(route('ventas.store'), [
+            'medio_pago' => 'efectivo',
+            'items' => [['producto_id' => $producto->id, 'cantidad' => 1]],
+        ])->assertRedirect(route('ventas.index'))->assertSessionHasNoErrors();
+
+        tenancy()->initialize($this->comercio);
+
+        $this->assertSame(1, Venta::count());
     }
 }
