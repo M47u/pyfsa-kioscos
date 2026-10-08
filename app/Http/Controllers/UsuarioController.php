@@ -54,9 +54,13 @@ class UsuarioController extends Controller
         return redirect()->route('usuarios.index')->with('status', 'Empleado creado correctamente.');
     }
 
-    public function editPassword(User $usuario): View
+    public function editPassword(User $usuario): View|RedirectResponse
     {
         $this->autorizarMismoComercio($usuario);
+
+        if ($this->esLaPropiaCuenta($usuario)) {
+            return $this->aMiPerfil();
+        }
 
         return view('usuarios.password', [
             'usuario' => $usuario,
@@ -67,7 +71,19 @@ class UsuarioController extends Controller
     {
         $this->autorizarMismoComercio($usuario);
 
-        $usuario->update(['password' => $request->validated('password')]);
+        if ($this->esLaPropiaCuenta($usuario)) {
+            return $this->aMiPerfil();
+        }
+
+        $usuario->password = $request->validated('password');
+
+        // La clave nueva la conoce el dueño: el empleado la cambia en "Mi
+        // perfil" en su próximo request (EnsurePasswordCambiada lee el flag
+        // por request, así que ya alcanza a una sesión abierta), y se cortan
+        // sus sesiones/remember_token por si la clave vieja estaba
+        // comprometida. Asignación directa: el flag no está en $fillable.
+        $usuario->debe_cambiar_password = true;
+        $usuario->invalidarSesiones();
 
         return redirect()->route('usuarios.index')->with('status', "Contraseña de {$usuario->name} actualizada correctamente.");
     }
@@ -91,6 +107,21 @@ class UsuarioController extends Controller
         $usuario->delete();
 
         return redirect()->route('usuarios.index')->with('status', "Empleado {$usuario->name} eliminado correctamente.");
+    }
+
+    /**
+     * El dueño cambiando SU PROPIA clave por acá se saltearía current_password
+     * y el cierre de sesiones: se lo manda a "Mi perfil", que sí los exige.
+     */
+    private function esLaPropiaCuenta(User $usuario): bool
+    {
+        return $usuario->is(auth()->user());
+    }
+
+    private function aMiPerfil(): RedirectResponse
+    {
+        return redirect()->route('perfil.edit')
+            ->with('advertencia', 'Tu propia contraseña se cambia desde acá: te pedimos la actual por seguridad.');
     }
 
     /**

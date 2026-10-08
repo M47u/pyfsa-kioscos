@@ -36,6 +36,8 @@ class AppServiceProvider extends ServiceProvider
      */
     private const INTENTOS_LOGIN_POR_IP = 20;
 
+    private const INTENTOS_PERFIL_POR_MINUTO = 5;
+
     /**
      * Register any application services.
      */
@@ -71,5 +73,13 @@ class AppServiceProvider extends ServiceProvider
         // y para poder ajustarlo/loguearlo más adelante sin tocar
         // routes/web.php. Se aplica en POST /login, ver ese archivo.
         RateLimiter::for('login-por-ip', fn (Request $request) => Limit::perMinute(self::INTENTOS_LOGIN_POR_IP)->by($request->ip()));
+
+        // Mi perfil (PerfilController): cambiar correo/contraseña pide la
+        // contraseña actual, así que un dispositivo tomado podría usar esos
+        // endpoints para adivinarla sin límite. 5/min por usuario (no por
+        // IP: lo que se protege es la cuenta), igual que el límite por
+        // email de LoginRequest. Cuenta TODOS los requests, también los OK.
+        RateLimiter::for('perfil', fn (Request $request) => Limit::perMinute(self::INTENTOS_PERFIL_POR_MINUTO)
+            ->by('perfil|'.($request->user()?->id ?? $request->ip())));
     }
 }

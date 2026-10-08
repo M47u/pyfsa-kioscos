@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Stancl\Tenancy\Database\Concerns\CentralConnection;
 
 class User extends Authenticatable
@@ -123,6 +125,42 @@ class User extends Authenticatable
     }
 
     /**
+     * `sessions` es CENTRAL. Con `session.connection` en null,
+     * DB::connection(null) usa la conexión DEFAULT, que dentro de una ruta
+     * tenant (tenancy inicializada) es la del TENANT, sin tabla `sessions`
+     * -> 500. Por eso el fallback explícito a la conexión central.
+     */
+    public static function conexionDeSesiones(): string
+    {
+        return config('session.connection') ?: config('tenancy.database.central_connection');
+    }
+
+    /**
+     * Rota el remember_token y borra las sesiones abiertas del usuario
+     * (salvo `$sesionAExcluir`, la actual de quien cambia su propia clave).
+     * Las sesiones solo se pueden cortar así con el driver `database`; con
+     * otro driver solo se rota el token (mismo criterio que
+     * `admin:crear --reset-password`). Guarda el modelo.
+     */
+    public function invalidarSesiones(?string $sesionAExcluir = null): void
+    {
+        $this->remember_token = Str::random(60);
+        $this->save();
+
+        if (config('session.driver') === 'database') {
+            $consulta = DB::connection(self::conexionDeSesiones())
+                ->table(config('session.table', 'sessions'))
+                ->where('user_id', $this->id);
+
+            if ($sesionAExcluir !== null) {
+                $consulta->where('id', '!=', $sesionAExcluir);
+            }
+
+            $consulta->delete();
+        }
+    }
+
+    /**
      * The attributes that should be hidden for serialization.
      *
      * @var list<string>
@@ -143,6 +181,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_admin' => 'boolean',
+            'debe_cambiar_password' => 'boolean',
         ];
     }
 }

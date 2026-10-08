@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsurePasswordCambiada;
 use App\Http\Middleware\InitializeTenancyByAuthenticatedUser;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -25,6 +26,15 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->prependToPriorityList(
             before: SubstituteBindings::class,
             prepend: InitializeTenancyByAuthenticatedUser::class,
+        );
+
+        // Mismo motivo: un usuario con cambio de contraseña obligatorio tiene
+        // que recibir el redirect, no un 404 de un binding fallido. Se
+        // inserta DESPUÉS de la tenancy (ambos quedan antes de SubstituteBindings,
+        // en este orden) porque lee `$request->user()` y el flag es central.
+        $middleware->prependToPriorityList(
+            before: SubstituteBindings::class,
+            prepend: EnsurePasswordCambiada::class,
         );
     })
     ->withExceptions(function (Exceptions $exceptions): void {

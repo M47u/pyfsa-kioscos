@@ -33,9 +33,13 @@
                         <td class="py-2 pr-4">{{ $usuario->email }}</td>
                         <td class="py-2 pr-4 capitalize">{{ $usuario->rol }}</td>
                         <td class="py-2 whitespace-nowrap space-x-3">
-                            <a href="{{ route('usuarios.password.edit', $usuario) }}" class="underline text-sm">
-                                Restablecer contraseña
-                            </a>
+                            {{-- La propia cuenta se cambia desde "Mi perfil"
+                                 (pide la contraseña actual). --}}
+                            @if (! $usuario->is(auth()->user()))
+                                <a href="{{ route('usuarios.password.edit', $usuario) }}" class="underline text-sm">
+                                    Restablecer contraseña
+                                </a>
+                            @endif
                             {{-- Al dueño no se lo puede eliminar desde acá
                                  (UsuarioController::destroy() lo bloquea
                                  igual, pero ni mostrar el botón es más

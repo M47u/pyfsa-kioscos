@@ -83,6 +83,10 @@
                 @endforeach
             @endif
 
+            <a href="{{ route('perfil.edit') }}" class="{{ request()->routeIs('perfil.*') ? 'underline font-medium' : '' }}">
+                Mi perfil
+            </a>
+
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
                 <button type="submit" class="underline">
@@ -122,6 +126,13 @@
                         </a>
                     @endforeach
                 @endif
+
+                <a
+                    href="{{ route('perfil.edit') }}"
+                    class="px-4 py-2 border-t border-[#19140035] dark:border-[#3E3E3A] hover:bg-[#f5f5f4] dark:hover:bg-[#161615] {{ request()->routeIs('perfil.*') ? 'underline font-medium' : '' }}"
+                >
+                    Mi perfil
+                </a>
 
                 <form method="POST" action="{{ route('logout') }}" class="border-t border-[#19140035] dark:border-[#3E3E3A]">
                     @csrf

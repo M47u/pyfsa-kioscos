@@ -155,7 +155,7 @@ class CrearAdminCommand extends Command
         $sesionesCerradas = null;
 
         if (config('session.driver') === 'database') {
-            $sesionesCerradas = DB::connection(config('session.connection'))
+            $sesionesCerradas = DB::connection(User::conexionDeSesiones())
                 ->table(config('session.table', 'sessions'))
                 ->where('user_id', $usuario->id)
                 ->delete();

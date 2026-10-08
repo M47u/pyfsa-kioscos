@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\CajaController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\PanelController;
+use App\Http\Controllers\PerfilController;
 use App\Http\Controllers\ProductoController;
 use App\Http\Controllers\ProductoImportController;
 use App\Http\Controllers\ReporteController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\VentaController;
 use App\Http\Controllers\ZonaHorariaController;
 use App\Http\Middleware\EnsureComercioSuscripcionActiva;
 use App\Http\Middleware\EnsureComercioTimezoneIsConfigured;
+use App\Http\Middleware\EnsurePasswordCambiada;
 use App\Http\Middleware\EnsureUserIsDueno;
 use App\Http\Middleware\InitializeTenancyByAuthenticatedUser;
 use Illuminate\Support\Facades\Route;
@@ -32,9 +34,17 @@ Route::middleware([
     'web',
     'auth',
     InitializeTenancyByAuthenticatedUser::class,
+    EnsurePasswordCambiada::class,
     EnsureComercioSuscripcionActiva::class,
     EnsureComercioTimezoneIsConfigured::class,
 ])->group(function () {
+    // Mi perfil (compartido dueño+empleado). Con debe_cambiar_password solo
+    // perfil.edit/perfil.password pasan — ver EnsurePasswordCambiada.
+    Route::get('/perfil', [PerfilController::class, 'edit'])->name('perfil.edit');
+    // throttle:perfil frena la fuerza bruta sobre current_password (ver AppServiceProvider).
+    Route::put('/perfil', [PerfilController::class, 'update'])->name('perfil.update')->middleware('throttle:perfil');
+    Route::put('/perfil/password', [PerfilController::class, 'updatePassword'])->name('perfil.password')->middleware('throttle:perfil');
+
     Route::get('/suscripcion-vencida', function () {
         return view('suscripcion-vencida');
     })->name('suscripcion-vencida');

@@ -140,7 +140,13 @@ class ComercioController extends Controller
         // El cast 'hashed' de User (ver ese modelo) la pasa por Hash::make
         // al guardar — nunca se guarda en texto plano.
         $dueno->password = $nueva;
-        $dueno->save();
+        // Asignación directa (fuera de $fillable, como is_admin): la
+        // contraseña generada la conoce PyFsa, así que el dueño tiene que
+        // cambiarla en "Mi perfil" antes de usar el sistema.
+        $dueno->debe_cambiar_password = true;
+        // Guarda el modelo, rota remember_token y corta sus sesiones: si
+        // la clave vieja estaba comprometida no tiene que sobrevivir.
+        $dueno->invalidarSesiones();
 
         RegistroAuditoria::registrar(
             RegistroAuditoria::ACCION_COMERCIO_PASSWORD_RESETEADA,

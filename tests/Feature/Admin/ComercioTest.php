@@ -173,11 +173,36 @@ class ComercioTest extends TestCase
         $this->assertTrue(Hash::check($nueva, $dueno->fresh()->password));
         $this->assertNotSame('password-vieja', $nueva);
 
+        // Tiene que cambiarla en "Mi perfil" antes de usar el sistema.
+        $this->assertTrue($dueno->fresh()->debe_cambiar_password);
+
         $this->assertDatabaseHas('registros_auditoria', [
             'accion' => RegistroAuditoria::ACCION_COMERCIO_PASSWORD_RESETEADA,
             'comercio_id' => $comercio->id,
             'user_id' => $admin->id,
         ]);
+    }
+
+    public function test_restablecer_password_del_dueno_cierra_sus_sesiones_y_rota_el_remember_token(): void
+    {
+        config(['session.driver' => 'database', 'session.connection' => null]);
+
+        $admin = User::factory()->create(['is_admin' => true]);
+        $comercio = $this->crearComercioConBaseReal();
+        $dueno = User::factory()->create([
+            'comercio_id' => $comercio->id,
+            'rol' => User::ROL_DUENO,
+            'remember_token' => 'token-viejo',
+        ]);
+        \Illuminate\Support\Facades\DB::table('sessions')->insert([
+            'id' => 'ajena-dueno', 'user_id' => $dueno->id, 'payload' => 'x', 'last_activity' => time(),
+        ]);
+
+        $this->actingAs($admin)->post(route('admin.comercios.restablecer-password', $comercio))
+            ->assertRedirect(route('admin.comercios.index'));
+
+        $this->assertSame(0, \Illuminate\Support\Facades\DB::table('sessions')->where('user_id', $dueno->id)->count());
+        $this->assertNotSame('token-viejo', $dueno->fresh()->remember_token);
     }
 
     /**

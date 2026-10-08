@@ -142,6 +142,45 @@ export async function contarPendientes() {
 }
 
 /**
+ * ¿El servidor CONFIRMÓ de verdad la escritura? `response.ok` solo no
+ * alcanza: el éxito de ventas.store / clientes.pagos.store es un redirect
+ * (302) que fetch sigue solo, así que cualquier redirect a una página HTML
+ * (/perfil por cambio de contraseña obligatorio, /suscripcion-vencida,
+ * /zona-horaria, /login) también termina en un 200 que parece éxito. Si se
+ * lo tomara por bueno, la cola borraría una venta/pago que NUNCA se
+ * registró. Por eso, si hubo redirect, el destino final tiene que ser el
+ * del éxito real: /ventas... para una venta, /clientes/... para un pago.
+ * (Una sesión vencida con Accept: application/json responde 401, y un CSRF
+ * vencido 419: ya no son response.ok.)
+ *
+ * El destino esperado se deriva de la URL de la acción (no se hardcodea
+ * '/ventas'): la venta POSTea a <base>/ventas y aterriza en <base>/ventas;
+ * el pago POSTea a <base>/clientes/{id}/pagos y aterriza en
+ * <base>/clientes/{id}. Así funciona bajo cualquier prefijo (ej. XAMPP
+ * /pyfsa-kioscos/public) sin aflojar el chequeo.
+ *
+ * @param {Response} response
+ * @param {'venta'|'pago'} tipo
+ * @param {string} action URL del POST (form.action / item.action)
+ */
+function escrituraConfirmada(response, tipo, action) {
+    if (!response.ok) {
+        return false;
+    }
+
+    if (!response.redirected) {
+        return true;
+    }
+
+    const ruta = new URL(response.url).pathname;
+    const rutaAccion = new URL(action, window.location.href).pathname;
+
+    return tipo === 'pago'
+        ? ruta === rutaAccion.replace(/\/pagos\/?$/, '')
+        : ruta === rutaAccion;
+}
+
+/**
  * Punto de entrada único para los dos formularios offline-aware (venta y
  * pago): agrega (o reusa) el uuid_dispositivo del form, y:
  *
@@ -212,7 +251,9 @@ export async function enviarOEncolar(form, tipo) {
             body: armarFormData(entradas),
         });
 
-        if (response.ok) {
+        // Un 200 que no fue la confirmación real (redirect a HTML) NO es éxito:
+        // no se resetea el carrito; el caller muestra el error genérico.
+        if (escrituraConfirmada(response, tipo, form.action)) {
             return { estado: 'enviada', response };
         }
 
@@ -262,7 +303,10 @@ export async function sincronizarPendientes() {
                 body: armarFormData(item.entradas),
             });
 
-            if (response.ok) {
+            // Solo se borra de la cola lo que el servidor confirmó de verdad
+            // (ver escrituraConfirmada): ante cualquier otra cosa el item se
+            // queda y se reintenta en el próximo sync.
+            if (escrituraConfirmada(response, item.tipo, item.action)) {
                 // eslint-disable-next-line no-await-in-loop
                 await eliminar(nombreStore, item.uuid_dispositivo);
                 notificarCambioCola();

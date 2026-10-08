@@ -73,6 +73,56 @@ class UsuarioTest extends TenantTestCase
         $this->assertFalse(Hash::check('password-vieja', $empleado->fresh()->password));
     }
 
+    public function test_restablecer_la_contrasena_de_un_empleado_lo_obliga_a_cambiarla(): void
+    {
+        $empleado = User::factory()->create([
+            'comercio_id' => $this->comercio->id,
+            'rol' => User::ROL_EMPLEADO,
+            'password' => 'password-vieja',
+        ]);
+
+        $this->actingAs($this->user)->put(route('usuarios.password.update', $empleado), [
+            'password' => 'password-nueva-123',
+            'password_confirmation' => 'password-nueva-123',
+        ]);
+
+        $this->assertTrue($empleado->fresh()->debe_cambiar_password);
+
+        $empleado = $empleado->fresh();
+        $this->actingAs($empleado)->get(route('panel'))->assertRedirect(route('perfil.edit'));
+        $this->actingAs($empleado)->get(route('ventas.create'))->assertRedirect(route('perfil.edit'));
+
+        $this->actingAs($empleado)->put(route('perfil.password'), [
+            'current_password' => 'password-nueva-123',
+            'password' => 'Otra-clave-segura-2026',
+            'password_confirmation' => 'Otra-clave-segura-2026',
+        ])->assertSessionHasNoErrors();
+
+        $this->actingAs($empleado->fresh())->get(route('panel'))->assertOk();
+    }
+
+    public function test_el_dueno_no_puede_cambiar_su_propia_contrasena_por_usuarios(): void
+    {
+        // Sin current_password ni cierre de sesiones sería un atajo: va por "Mi perfil".
+        $this->actingAs($this->user)->get(route('usuarios.password.edit', $this->user))
+            ->assertRedirect(route('perfil.edit'));
+
+        $this->actingAs($this->user)->put(route('usuarios.password.update', $this->user), [
+            'password' => 'password-nueva-123',
+            'password_confirmation' => 'password-nueva-123',
+        ])->assertRedirect(route('perfil.edit'));
+
+        $this->assertTrue(Hash::check('password', $this->user->fresh()->password));
+        $this->assertFalse((bool) $this->user->fresh()->debe_cambiar_password);
+    }
+
+    public function test_el_listado_no_ofrece_cambiar_la_contrasena_de_la_propia_fila(): void
+    {
+        $this->actingAs($this->user)->get(route('usuarios.index'))
+            ->assertOk()
+            ->assertDontSee(route('usuarios.password.edit', $this->user), false);
+    }
+
     public function test_empleado_recibe_403_al_intentar_restablecer_una_contrasena(): void
     {
         $otroEmpleado = User::factory()->create([
